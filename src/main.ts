@@ -1,23 +1,25 @@
 import './styles.css';
-import type { Block, Doc, LetBinding } from './model';
+import type { Editor } from '@tiptap/core';
+import type { DocLogic, LetBinding, ShowRule, ShowTarget } from './model';
 import { uid } from './model';
 import { generate } from './generate';
 import { renderSvg, renderPdf } from './typst';
 import { TEMPLATES, TEMPLATE_ICONS } from './templates';
 import { highlightTypst } from './highlight';
+import { createEditor } from './editor';
+import { installBlockHandle } from './blockhandle';
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-let doc: Doc = TEMPLATES.find((t) => t.id === 'report')!.make();
+const initial = TEMPLATES.find((t) => t.id === 'report')!.make();
+let logic: DocLogic = initial.logic;
 let previewVisible = false;
 let activeTab: 'home' | 'layout' | 'insert' | 'view' = 'home';
-let activeBlockId: string | null = doc.content[0]?.id ?? null;
-let focusAfterRender: { id: string; caret: 'end' | 'start' } | null = null;
+let editor!: Editor;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// small DOM helper
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -33,9 +35,9 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 // ---------------------------------------------------------------------------
-// Typst preview (debounced) — only touches the preview pane
+// Typst preview (debounced)
 // ---------------------------------------------------------------------------
-const previewPane = el('div', { class: 'preview' });
+const previewPane = el('div', { class: 'preview hidden' });
 let previewTimer: number | undefined;
 
 function schedulePreview(): void {
@@ -43,10 +45,9 @@ function schedulePreview(): void {
   window.clearTimeout(previewTimer);
   previewTimer = window.setTimeout(refreshPreview, 300);
 }
-
 async function refreshPreview(): Promise<void> {
   if (!previewVisible) return;
-  const source = generate(doc);
+  const source = generate(logic, editor.state.doc);
   try {
     const svg = await renderSvg(source);
     const holder = el('div', { class: 'pg' });
@@ -58,233 +59,35 @@ async function refreshPreview(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// The WYSIWYG canvas
+// Editor (TipTap / ProseMirror)
 // ---------------------------------------------------------------------------
 const canvasWrap = el('div', { class: 'canvas-wrap' });
+const pageEl = el('div', { class: 'page' });
+canvasWrap.append(pageEl);
 
-function rebuildCanvas(): void {
-  const page = el('div', { class: 'page' + (doc.style.par.justify ? ' justify' : '') });
-  doc.content.forEach((b, i) => page.append(blockEl(b, i)));
-
-  const add = el('div', { class: 'add-block' }, '+  Add a block, or just start typing…');
-  add.onclick = () => insertBlock(doc.content.length - 1, { id: uid(), type: 'paragraph', text: '' });
-  page.append(add);
-
-  canvasWrap.replaceChildren(page);
-  applyFocus();
-}
-
-function blockEl(b: Block, index: number): HTMLElement {
-  const wrap = el('div', { class: 'doc-block' });
-  wrap.dataset.id = b.id;
-  wrap.addEventListener('focusin', () => { activeBlockId = b.id; });
-
-  const handle = el('div', { class: 'handle', title: 'Block options' }, '⠿');
-  handle.onclick = (e) => { e.stopPropagation(); openMenu(b, index, wrap, handle); };
-  wrap.append(handle);
-
-  let body: HTMLElement;
-  switch (b.type) {
-    case 'heading':
-      body = editable(`doc-h${b.level}`, b.text, `Heading ${b.level}`, (t) => (b.text = t));
-      attachTextKeys(body, index);
-      break;
-    case 'paragraph':
-      body = editable('doc-p', b.text, 'Type here…', (t) => (b.text = t));
-      attachTextKeys(body, index);
-      break;
-    case 'callout':
-      body = editable('doc-callout', b.text, 'Callout…', (t) => (b.text = t));
-      attachTextKeys(body, index);
-      break;
-    case 'list': {
-      const tag = b.ordered ? 'ol' : 'ul';
-      body = el(tag, { class: 'doc-list', contenteditable: 'true' });
-      for (const it of b.items.length ? b.items : ['']) body.append(el('li', {}, it));
-      body.addEventListener('input', () => {
-        b.items = Array.from(body.querySelectorAll('li')).map((li) => li.textContent ?? '');
-        schedulePreview();
-      });
-      break;
-    }
-    case 'raw': {
-      body = el('div', {});
-      body.append(el('div', { class: 'doc-raw-label' }, 'raw typst'));
-      const code = el('div', { class: 'doc-raw', contenteditable: 'true', 'data-ph': '#…' });
-      code.textContent = b.code;
-      code.addEventListener('input', () => { b.code = code.innerText; schedulePreview(); });
-      body.append(code);
-      break;
-    }
-  }
-  body.dataset.blockBody = '1';
-  wrap.append(body);
-  return wrap;
-}
-
-function editable(cls: string, text: string, placeholder: string, set: (t: string) => void): HTMLElement {
-  const n = el('div', { class: cls, contenteditable: 'true', 'data-ph': placeholder });
-  n.textContent = text;
-  n.addEventListener('input', () => { set(n.textContent ?? ''); schedulePreview(); });
-  return n;
-}
-
-function attachTextKeys(node: HTMLElement, index: number): void {
-  node.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      insertBlock(index, { id: uid(), type: 'paragraph', text: '' });
-    } else if (e.key === 'Backspace' && isCaretAtStart(node) && (node.textContent ?? '') === '') {
-      e.preventDefault();
-      if (doc.content.length === 1) return;
-      doc.content.splice(index, 1);
-      const prev = doc.content[Math.max(0, index - 1)];
-      focusAfterRender = { id: prev.id, caret: 'end' };
-      structuralChange();
-    }
+function mountEditor(content: object): void {
+  editor = createEditor(pageEl, content as never, {
+    onUpdate: () => { schedulePreview(); if (activeTab === 'home') renderRibbon(); },
+    onSelection: () => { if (activeTab === 'home') renderRibbon(); },
   });
+  installBlockHandle(editor, pageEl);
+  syncJustify();
 }
 
-// ---------------------------------------------------------------------------
-// Block operations (shared by menu, ribbon, keyboard)
-// ---------------------------------------------------------------------------
-function insertBlock(afterIndex: number, nb: Block): void {
-  doc.content.splice(afterIndex + 1, 0, nb);
-  activeBlockId = nb.id;
-  focusAfterRender = { id: nb.id, caret: 'end' };
-  structuralChange();
+function syncJustify(): void {
+  pageEl.classList.toggle('justify', logic.style.par.justify);
 }
 
-function convertBlock(index: number, nb: Block): void {
-  doc.content[index] = nb;
-  activeBlockId = nb.id;
-  focusAfterRender = { id: nb.id, caret: 'end' };
-  structuralChange();
+function cmd(run: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>): void {
+  run(editor.chain().focus()).run();
 }
 
-function move(index: number, dir: number): void {
-  const j = index + dir;
-  if (j < 0 || j >= doc.content.length) return;
-  const [item] = doc.content.splice(index, 1);
-  doc.content.splice(j, 0, item);
-  focusAfterRender = { id: item.id, caret: 'end' };
-  structuralChange();
-}
-
-function activeIndex(): number {
-  const i = doc.content.findIndex((b) => b.id === activeBlockId);
-  return i >= 0 ? i : doc.content.length - 1;
-}
-
-function currentText(b: Block): string {
-  if (b.type === 'list') return b.items.join('\n');
-  if (b.type === 'raw') return b.code;
-  return b.text;
-}
-function splitItems(text: string): string[] {
-  const items = text.split('\n').map((s) => s.trim()).filter(Boolean);
-  return items.length ? items : [''];
-}
-
-/** Block factory by kind, carrying over text from an existing block where useful. */
-function makeBlock(kind: string, text = ''): Block {
-  switch (kind) {
-    case 'h1': return { id: uid(), type: 'heading', level: 1, text };
-    case 'h2': return { id: uid(), type: 'heading', level: 2, text };
-    case 'h3': return { id: uid(), type: 'heading', level: 3, text };
-    case 'bullet': return { id: uid(), type: 'list', ordered: false, items: splitItems(text) };
-    case 'numbered': return { id: uid(), type: 'list', ordered: true, items: splitItems(text) };
-    case 'callout': return { id: uid(), type: 'callout', text };
-    case 'raw': return { id: uid(), type: 'raw', code: text || '#lorem(20)' };
-    default: return { id: uid(), type: 'paragraph', text };
-  }
-}
-
-/** Convert the currently focused block (Word-style "paragraph styles"). */
-function applyStyle(kind: string): void {
-  const i = activeIndex();
-  if (i < 0) { insertBlock(doc.content.length - 1, makeBlock(kind)); return; }
-  convertBlock(i, makeBlock(kind, currentText(doc.content[i])));
-}
-
-/** Insert a fresh block of a kind after the focused block. */
-function insertKind(kind: string): void {
-  insertBlock(activeIndex(), makeBlock(kind));
-}
-
-// ---------------------------------------------------------------------------
-// Block options menu (Notion-style, on the canvas handle)
-// ---------------------------------------------------------------------------
-let openMenuEl: HTMLElement | null = null;
-function closeMenu(): void {
-  openMenuEl?.remove();
-  openMenuEl = null;
-  document.querySelectorAll('.menu-open').forEach((n) => n.classList.remove('menu-open'));
-}
-
-function openMenu(b: Block, index: number, wrap: HTMLElement, anchor: HTMLElement): void {
-  closeMenu();
-  wrap.classList.add('menu-open');
-  const menu = el('div', { class: 'block-menu' });
-  const item = (key: string, label: string, fn: () => void, danger = false) => {
-    const mi = el('div', { class: 'mi' + (danger ? ' danger' : '') }, el('span', { class: 'k' }, key), label);
-    mi.onclick = (e) => { e.stopPropagation(); closeMenu(); fn(); };
-    return mi;
-  };
-  const text = currentText(b);
-  menu.append(
-    item('H1', 'Heading 1', () => convertBlock(index, makeBlock('h1', text))),
-    item('H2', 'Heading 2', () => convertBlock(index, makeBlock('h2', text))),
-    item('H3', 'Heading 3', () => convertBlock(index, makeBlock('h3', text))),
-    item('¶', 'Text', () => convertBlock(index, makeBlock('text', text))),
-    item('•', 'Bullet list', () => convertBlock(index, makeBlock('bullet', text))),
-    item('1.', 'Numbered list', () => convertBlock(index, makeBlock('numbered', text))),
-    item('❝', 'Callout', () => convertBlock(index, makeBlock('callout', text))),
-    item('</>', 'Raw Typst', () => convertBlock(index, makeBlock('raw', text))),
-    el('div', { class: 'sep' }),
-    item('+', 'Insert below', () => insertBlock(index, makeBlock('text'))),
-    item('↑', 'Move up', () => move(index, -1)),
-    item('↓', 'Move down', () => move(index, +1)),
-    el('div', { class: 'sep' }),
-    item('✕', 'Delete', () => {
-      doc.content.splice(index, 1);
-      if (!doc.content.length) doc.content.push(makeBlock('text'));
-      structuralChange();
-    }, true),
-  );
-  document.body.append(menu);
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = `${r.right + 6}px`;
-  menu.style.top = `${r.top}px`;
-  const mr = menu.getBoundingClientRect();
-  if (mr.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - mr.height - 8}px`;
-  openMenuEl = menu;
-}
-
-// ---------------------------------------------------------------------------
-// Caret helpers
-// ---------------------------------------------------------------------------
-function isCaretAtStart(node: HTMLElement): boolean {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
-  const r = sel.getRangeAt(0);
-  return node.contains(r.startContainer) && r.startOffset === 0;
-}
-
-function applyFocus(): void {
-  if (!focusAfterRender) return;
-  const { id, caret } = focusAfterRender;
-  focusAfterRender = null;
-  const wrap = canvasWrap.querySelector<HTMLElement>(`.doc-block[data-id="${id}"]`);
-  const body = wrap?.querySelector<HTMLElement>('[contenteditable]');
-  if (!body) return;
-  body.focus();
-  const sel = window.getSelection();
-  const range = document.createRange();
-  range.selectNodeContents(body);
-  range.collapse(caret === 'start');
-  sel?.removeAllRanges();
-  sel?.addRange(range);
+function setLink(): void {
+  const prev = (editor.getAttributes('link').href as string) || 'https://';
+  const url = window.prompt('Link URL (empty to remove)', prev);
+  if (url === null) return;
+  if (url === '') editor.chain().focus().extendMarkRange('link').unsetLink().run();
+  else editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +97,10 @@ const ribbonBody = el('div', { class: 'ribbon-body' });
 
 function ribbon(): HTMLElement {
   const bar = el('div', { class: 'ribbon' });
-
   const title = el('div', { class: 'titlebar' },
     el('span', { class: 'app' }, 'Typst WYSIWYG'),
     el('span', { class: 'muted' }, 'spike'),
   );
-
   const tabs = el('div', { class: 'tabstrip' });
   const tabDefs: [typeof activeTab, string][] = [
     ['home', 'Home'], ['layout', 'Layout'], ['insert', 'Insert'], ['view', 'View'],
@@ -309,7 +110,6 @@ function ribbon(): HTMLElement {
     t.onclick = () => { activeTab = id; renderRibbon(); };
     tabs.append(t);
   }
-
   bar.append(title, tabs, ribbonBody);
   return bar;
 }
@@ -322,103 +122,98 @@ function renderRibbon(): void {
   ribbonBody.replaceChildren(...ribbonGroups());
 }
 
-// ribbon building blocks ----------------------------------------------------
 function group(label: string, ...controls: Node[]): HTMLElement {
-  return el('div', { class: 'rgroup' },
-    el('div', { class: 'rcontrols' }, ...controls),
-    el('div', { class: 'glabel' }, label),
-  );
+  return el('div', { class: 'rgroup' }, el('div', { class: 'rcontrols' }, ...controls), el('div', { class: 'glabel' }, label));
 }
 function rbtn(icon: string, label: string, onClick: () => void, active = false): HTMLElement {
-  const b = el('button', { class: 'rbtn' + (active ? ' active' : '') },
-    el('span', { class: 'ico' }, icon), el('span', {}, label));
+  const ico = el('span', { class: 'ico' });
+  if (icon.startsWith('<svg')) ico.innerHTML = icon;
+  else ico.textContent = icon;
+  const b = el('button', { class: 'rbtn' + (active ? ' active' : '') }, ico, el('span', {}, label));
   b.onclick = onClick;
   return b;
 }
+
+const LINK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
 
 function ribbonGroups(): Node[] {
+  const a = editor; // active-state helper
   switch (activeTab) {
     case 'home':
       return [
         group('Templates', rbtn('✚', 'New', openTemplateModal)),
+        group('History',
+          rbtn('↶', 'Undo', () => cmd((c) => c.undo())),
+          rbtn('↷', 'Redo', () => cmd((c) => c.redo())),
+        ),
         group('Paragraph styles',
-          rbtn('H1', 'Title', () => applyStyle('h1')),
-          rbtn('H2', 'Heading', () => applyStyle('h2')),
-          rbtn('H3', 'Subhead', () => applyStyle('h3')),
-          rbtn('¶', 'Text', () => applyStyle('text')),
+          rbtn('H1', 'Title', () => cmd((c) => c.toggleHeading({ level: 1 })), a.isActive('heading', { level: 1 })),
+          rbtn('H2', 'Heading', () => cmd((c) => c.toggleHeading({ level: 2 })), a.isActive('heading', { level: 2 })),
+          rbtn('H3', 'Subhead', () => cmd((c) => c.toggleHeading({ level: 3 })), a.isActive('heading', { level: 3 })),
+          rbtn('¶', 'Text', () => cmd((c) => c.setParagraph()), a.isActive('paragraph')),
+        ),
+        group('Format',
+          rbtn('B', 'Bold', () => cmd((c) => c.toggleBold()), a.isActive('bold')),
+          rbtn('I', 'Italic', () => cmd((c) => c.toggleItalic()), a.isActive('italic')),
+          rbtn('S', 'Strike', () => cmd((c) => c.toggleStrike()), a.isActive('strike')),
+          rbtn(LINK_ICON, 'Link', setLink, a.isActive('link')),
         ),
         group('Lists',
-          rbtn('•', 'Bullets', () => applyStyle('bullet')),
-          rbtn('1.', 'Numbered', () => applyStyle('numbered')),
+          rbtn('•', 'Bullets', () => cmd((c) => c.toggleBulletList()), a.isActive('bulletList')),
+          rbtn('1.', 'Numbered', () => cmd((c) => c.toggleOrderedList()), a.isActive('orderedList')),
         ),
         group('Blocks',
-          rbtn('❝', 'Callout', () => applyStyle('callout')),
-          rbtn('</>', 'Raw', () => applyStyle('raw')),
+          rbtn('❝', 'Callout', () => cmd((c) => c.toggleWrap('callout')), a.isActive('callout')),
+          rbtn('</>', 'Raw', () => cmd((c) => c.toggleCodeBlock()), a.isActive('codeBlock')),
         ),
-        group('Export',
-          rbtn('⤓', '.typ', exportTyp),
-          rbtn('⬇', 'PDF', exportPdf),
-        ),
+        group('Export', rbtn('⤓', '.typ', exportTyp), rbtn('⬇', 'PDF', exportPdf)),
       ];
     case 'layout': {
-      const s = doc.style;
+      const s = logic.style;
       const paper = el('select', {}) as HTMLSelectElement;
       for (const p of ['a4', 'us-letter', 'a5'] as const) {
         const o = el('option', { value: p }, p);
         if (s.page.paper === p) o.selected = true;
         paper.append(o);
       }
-      paper.onchange = () => { s.page.paper = paper.value as Doc['style']['page']['paper']; schedulePreview(); };
+      paper.onchange = () => { s.page.paper = paper.value as DocLogic['style']['page']['paper']; schedulePreview(); };
       const just = rbtn(s.par.justify ? '☰' : '≡', 'Justify', () => {
-        s.par.justify = !s.par.justify;
-        canvasWrap.querySelector('.page')?.classList.toggle('justify', s.par.justify);
-        renderRibbon();
-        schedulePreview();
+        s.par.justify = !s.par.justify; syncJustify(); renderRibbon(); schedulePreview();
       }, s.par.justify);
       return [
-        group('Page',
-          rfield('Paper', paper),
-          rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v))),
-        ),
-        group('Text',
-          rfield('Font', txt(s.text.font, (v) => (s.text.font = v), 'Typst default', 130)),
-          rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v))),
-        ),
-        group('Paragraph',
-          rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)),
-          just,
-        ),
+        group('Page', rfield('Paper', paper), rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v)))),
+        group('Text', rfield('Font', txtInput(s.text.font, (v) => (s.text.font = v), 'Typst default', 130)), rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v)))),
+        group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
       ];
     }
     case 'insert':
       return [
         group('Blocks',
-          rbtn('H', 'Heading', () => insertKind('h2')),
-          rbtn('¶', 'Text', () => insertKind('text')),
-          rbtn('•', 'Bullets', () => insertKind('bullet')),
-          rbtn('1.', 'Numbered', () => insertKind('numbered')),
-          rbtn('❝', 'Callout', () => insertKind('callout')),
-          rbtn('</>', 'Raw Typst', () => insertKind('raw')),
+          rbtn('H', 'Heading', () => cmd((c) => c.insertContent({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Heading' }] }))),
+          rbtn('¶', 'Text', () => cmd((c) => c.insertContent('<p></p>'))),
+          rbtn('•', 'Bullets', () => cmd((c) => c.toggleBulletList())),
+          rbtn('1.', 'Numbered', () => cmd((c) => c.toggleOrderedList())),
+          rbtn('❝', 'Callout', () => cmd((c) => c.insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }))),
+          rbtn('</>', 'Raw Typst', () => cmd((c) => c.insertContent({ type: 'codeBlock', content: [{ type: 'text', text: '#lorem(20)' }] }))),
         ),
-        group('Logic', rbtn('ƒ', 'Definitions', openDefinitionsModal)),
+        group('Logic',
+          rbtn('ƒ', 'Definitions', openDefinitionsModal),
+          rbtn('✦', 'Show rules', openShowModal),
+        ),
       ];
     case 'view':
       return [
-        group('Show',
-          rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible),
-        ),
-        group('Source',
-          rbtn('</>', 'Typst source', openSourceModal),
-        ),
+        group('Show', rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible)),
+        group('Source', rbtn('</>', 'Typst source', openSourceModal)),
       ];
   }
 }
 
 // ---------------------------------------------------------------------------
-// Ribbon actions
+// Ribbon actions / small inputs
 // ---------------------------------------------------------------------------
 function togglePreview(): void {
   previewVisible = !previewVisible;
@@ -426,25 +221,20 @@ function togglePreview(): void {
   renderRibbon();
   if (previewVisible) { previewPane.replaceChildren(el('div', { class: 'loading' }, 'Rendering…')); refreshPreview(); }
 }
-
-function exportTyp(): void {
-  download('document.typ', new Blob([generate(doc)], { type: 'text/plain' }));
-}
+function exportTyp(): void { download('document.typ', new Blob([generate(logic, editor.state.doc)], { type: 'text/plain' })); }
 async function exportPdf(): Promise<void> {
   try {
-    const bytes = await renderPdf(generate(doc));
+    const bytes = await renderPdf(generate(logic, editor.state.doc));
     download('document.pdf', new Blob([bytes as BlobPart], { type: 'application/pdf' }));
   } catch (e) { alert('PDF export failed:\n' + String(e)); }
 }
 function download(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
-  const a = el('a', { href: url, download: name });
-  a.click();
+  const aEl = el('a', { href: url, download: name });
+  aEl.click();
   URL.revokeObjectURL(url);
 }
-
-// small inputs (used in ribbon Layout tab)
-function txt(value: string, on: (v: string) => void, placeholder = '', width = 90): HTMLInputElement {
+function txtInput(value: string, on: (v: string) => void, placeholder = '', width = 90): HTMLInputElement {
   const i = el('input', { type: 'text', placeholder }) as HTMLInputElement;
   i.value = value; i.style.width = `${width}px`;
   i.oninput = () => { on(i.value); schedulePreview(); };
@@ -474,90 +264,47 @@ function openTemplateModal(): void {
   const modal = el('div', { class: 'modal' });
   const search = el('input', { type: 'text', class: 'modal-search', placeholder: 'Search templates…' }) as HTMLInputElement;
   const grid = el('div', { class: 'tmpl-grid' });
-
   const draw = (q: string) => {
     const needle = q.trim().toLowerCase();
     grid.replaceChildren();
-    const hits = TEMPLATES.filter((t) =>
-      !needle || (t.label + ' ' + t.description + ' ' + t.keywords).toLowerCase().includes(needle));
+    const hits = TEMPLATES.filter((t) => !needle || (t.label + ' ' + t.description + ' ' + t.keywords).toLowerCase().includes(needle));
     if (!hits.length) { grid.append(el('div', { class: 'muted' }, 'No templates match.')); return; }
     for (const t of hits) {
       const ico = el('div', { class: 'ico' });
       ico.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${TEMPLATE_ICONS[t.icon]}</svg>`;
-      const card = el('div', { class: 'tmpl-card' },
-        ico,
-        el('div', { class: 'name' }, t.label),
-        el('div', { class: 'desc' }, t.description),
-      );
+      const card = el('div', { class: 'tmpl-card' }, ico, el('div', { class: 'name' }, t.label), el('div', { class: 'desc' }, t.description));
       card.onclick = () => {
-        doc = t.make();
-        activeBlockId = doc.content[0]?.id ?? null;
+        const made = t.make();
+        logic = made.logic;
+        editor.commands.setContent(made.content as never);
+        syncJustify();
         closeModal();
-        structuralChange();
+        renderRibbon();
+        schedulePreview();
+        editor.commands.focus('start');
       };
       grid.append(card);
     }
   };
-
   search.oninput = () => draw(search.value);
-  modal.append(
-    el('div', { class: 'modal-head' }, el('h3', {}, 'New from template'), search),
-    grid,
-  );
+  modal.append(el('div', { class: 'modal-head' }, el('h3', {}, 'New from template'), search), grid);
   openModal(modal);
   draw('');
   search.focus();
 }
 
-function openSourceModal(): void {
-  const source = generate(doc);
-  const modal = el('div', { class: 'modal modal-wide' });
-
-  const copy = el('button', {}, 'Copy');
-  copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(source); copy.textContent = 'Copied'; setTimeout(() => (copy.textContent = 'Copy'), 1200); }
-    catch { copy.textContent = 'Copy failed'; }
-  };
-  const dl = el('button', {}, 'Download .typ');
-  dl.onclick = exportTyp;
-
-  const pre = el('pre', { class: 'source-code' });
-  pre.innerHTML = highlightTypst(source);
-
-  modal.append(
-    el('div', { class: 'modal-head modal-head-row' },
-      el('div', {},
-        el('h3', {}, 'Typst source'),
-        el('div', { class: 'muted' }, 'Generated from the document — read-only.'),
-      ),
-      el('div', { class: 'modal-actions' }, copy, dl),
-    ),
-    el('div', { class: 'source-wrap' }, pre),
-  );
-  openModal(modal);
-}
-
 function openDefinitionsModal(): void {
   const modal = el('div', { class: 'modal' });
   const list = el('div', { class: 'def-list' });
-
   const draw = () => {
     list.replaceChildren();
-    if (!doc.lets.length) list.append(el('div', { class: 'muted' }, 'No definitions yet. These become #let bindings.'));
-    for (const b of doc.lets) list.append(letRow(b, draw));
+    if (!logic.lets.length) list.append(el('div', { class: 'muted' }, 'No definitions yet. These become #let bindings.'));
+    for (const b of logic.lets) list.append(letRow(b, draw));
   };
-
   const add = el('button', { class: 'primary' }, '+ Add definition');
-  add.onclick = () => {
-    doc.lets.push({ id: uid('let'), name: `var${doc.lets.length + 1}`, kind: 'value', code: '""' });
-    draw(); schedulePreview();
-  };
-
+  add.onclick = () => { logic.lets.push({ id: uid('let'), name: `var${logic.lets.length + 1}`, kind: 'value', code: '""' }); draw(); schedulePreview(); };
   modal.append(
-    el('div', { class: 'modal-head' },
-      el('h3', {}, 'Definitions · #let'),
-      el('div', { class: 'muted' }, 'Reusable values and components for power users.'),
-    ),
+    el('div', { class: 'modal-head' }, el('h3', {}, 'Definitions · #let'), el('div', { class: 'muted' }, 'Reusable values and components for power users.')),
     list,
     el('div', { class: 'modal-foot' }, add, doneBtn()),
   );
@@ -565,16 +312,10 @@ function openDefinitionsModal(): void {
   draw();
 }
 
-function doneBtn(): HTMLElement {
-  const b = el('button', {}, 'Done');
-  b.onclick = () => { closeModal(); schedulePreview(); };
-  return b;
-}
-
 function letRow(b: LetBinding, redraw: () => void): HTMLElement {
   const box = el('div', { class: 'def' });
   const head = el('div', { class: 'bhead' });
-  const name = txt(b.name, (v) => (b.name = v)); name.style.width = '120px';
+  const name = txtInput(b.name, (v) => (b.name = v)); name.style.width = '120px';
   const kind = el('select', {}) as HTMLSelectElement;
   for (const k of ['value', 'component'] as const) {
     const o = el('option', { value: k }, k);
@@ -583,7 +324,7 @@ function letRow(b: LetBinding, redraw: () => void): HTMLElement {
   }
   kind.onchange = () => { b.kind = kind.value as LetBinding['kind']; schedulePreview(); };
   const del = el('button', { title: 'Delete' }, '✕');
-  del.onclick = () => { doc.lets = doc.lets.filter((x) => x !== b); redraw(); schedulePreview(); };
+  del.onclick = () => { logic.lets = logic.lets.filter((x) => x !== b); redraw(); schedulePreview(); };
   head.append(name, kind, el('span', { class: 'spacer' }), del);
   box.append(head);
   const code = el('textarea', { rows: '2' }) as HTMLTextAreaElement;
@@ -593,27 +334,125 @@ function letRow(b: LetBinding, redraw: () => void): HTMLElement {
   return box;
 }
 
-// ---------------------------------------------------------------------------
-// Change plumbing & global handlers
-// ---------------------------------------------------------------------------
-function structuralChange(): void {
-  rebuildCanvas();
-  renderRibbon();
-  schedulePreview();
+// --- Structured #show editor ---
+function openShowModal(): void {
+  const modal = el('div', { class: 'modal' });
+  const list = el('div', { class: 'def-list' });
+  const draw = () => {
+    list.replaceChildren();
+    if (!logic.shows.length) list.append(el('div', { class: 'muted' }, 'No show rules yet. They restyle elements document-wide.'));
+    for (const r of logic.shows) list.append(showRow(r, draw));
+  };
+  const add = el('button', { class: 'primary' }, '+ Add show rule');
+  add.onclick = () => {
+    logic.shows.push({ id: uid('show'), target: 'heading', level: null, props: { fill: '#1c7ed6', sizePt: null, weight: 'inherit', style: 'inherit' } });
+    draw(); schedulePreview();
+  };
+  modal.append(
+    el('div', { class: 'modal-head' }, el('h3', {}, 'Show rules · #show'), el('div', { class: 'muted' }, 'Restyle every heading, emphasis, link, etc.')),
+    list,
+    el('div', { class: 'modal-foot' }, add, doneBtn()),
+  );
+  openModal(modal);
+  draw();
 }
 
-document.addEventListener('click', (e) => {
-  if (openMenuEl && !openMenuEl.contains(e.target as Node)) closeMenu();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeMenu(); closeModal(); }
-});
+function showRow(r: ShowRule, redraw: () => void): HTMLElement {
+  const box = el('div', { class: 'def' });
+
+  const target = el('select', {}) as HTMLSelectElement;
+  for (const t of ['heading', 'strong', 'emph', 'link', 'raw'] as ShowTarget[]) {
+    const o = el('option', { value: t }, t);
+    if (r.target === t) o.selected = true;
+    target.append(o);
+  }
+  target.onchange = () => { r.target = target.value as ShowTarget; redraw(); schedulePreview(); };
+
+  const del = el('button', { title: 'Delete' }, '✕');
+  del.onclick = () => { logic.shows = logic.shows.filter((x) => x !== r); redraw(); schedulePreview(); };
+
+  const head = el('div', { class: 'bhead' },
+    el('span', { class: 'when' }, 'When'),
+    target,
+  );
+  if (r.target === 'heading') {
+    const level = el('select', {}) as HTMLSelectElement;
+    for (const [v, lab] of [['', 'any level'], ['1', 'level 1'], ['2', 'level 2'], ['3', 'level 3']] as const) {
+      const o = el('option', { value: v }, lab);
+      if (String(r.level ?? '') === v) o.selected = true;
+      level.append(o);
+    }
+    level.onchange = () => { r.level = level.value ? Number(level.value) : null; schedulePreview(); };
+    head.append(level);
+  }
+  head.append(el('span', { class: 'spacer' }), del);
+  box.append(head);
+
+  // properties
+  const props = el('div', { class: 'show-props' });
+  const fill = el('input', { type: 'text', placeholder: 'no color' }) as HTMLInputElement;
+  fill.value = r.props.fill; fill.style.width = '92px';
+  fill.oninput = () => { r.props.fill = fill.value; schedulePreview(); };
+  const swatch = el('input', { type: 'color' }) as HTMLInputElement;
+  swatch.value = /^#[0-9a-fA-F]{6}$/.test(r.props.fill) ? r.props.fill : '#1c7ed6';
+  swatch.oninput = () => { r.props.fill = swatch.value; fill.value = swatch.value; schedulePreview(); };
+
+  const size = el('input', { type: 'number', step: '0.5', placeholder: 'inherit' }) as HTMLInputElement;
+  size.value = r.props.sizePt == null ? '' : String(r.props.sizePt); size.style.width = '70px';
+  size.oninput = () => { r.props.sizePt = size.value ? parseFloat(size.value) : null; schedulePreview(); };
+
+  const weight = el('select', {}) as HTMLSelectElement;
+  for (const w of ['inherit', 'regular', 'bold'] as const) { const o = el('option', { value: w }, w); if (r.props.weight === w) o.selected = true; weight.append(o); }
+  weight.onchange = () => { r.props.weight = weight.value as ShowRule['props']['weight']; schedulePreview(); };
+
+  const style = el('select', {}) as HTMLSelectElement;
+  for (const st of ['inherit', 'normal', 'italic'] as const) { const o = el('option', { value: st }, st); if (r.props.style === st) o.selected = true; style.append(o); }
+  style.onchange = () => { r.props.style = style.value as ShowRule['props']['style']; schedulePreview(); };
+
+  props.append(
+    el('label', { class: 'rfield' }, el('span', {}, 'Color'), el('span', { class: 'color-pair' }, swatch, fill)),
+    el('label', { class: 'rfield' }, el('span', {}, 'Size pt'), size),
+    el('label', { class: 'rfield' }, el('span', {}, 'Weight'), weight),
+    el('label', { class: 'rfield' }, el('span', {}, 'Style'), style),
+  );
+  box.append(props);
+  return box;
+}
+
+function doneBtn(): HTMLElement {
+  const b = el('button', {}, 'Done');
+  b.onclick = () => { closeModal(); schedulePreview(); };
+  return b;
+}
+
+function openSourceModal(): void {
+  const source = generate(logic, editor.state.doc);
+  const modal = el('div', { class: 'modal modal-wide' });
+  const copy = el('button', {}, 'Copy');
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(source); copy.textContent = 'Copied'; setTimeout(() => (copy.textContent = 'Copy'), 1200); }
+    catch { copy.textContent = 'Copy failed'; }
+  };
+  const dl = el('button', {}, 'Download .typ');
+  dl.onclick = exportTyp;
+  const pre = el('pre', { class: 'source-code' });
+  pre.innerHTML = highlightTypst(source);
+  modal.append(
+    el('div', { class: 'modal-head modal-head-row' },
+      el('div', {}, el('h3', {}, 'Typst source'), el('div', { class: 'muted' }, 'Generated from the document — read-only.')),
+      el('div', { class: 'modal-actions' }, copy, dl),
+    ),
+    el('div', { class: 'source-wrap' }, pre),
+  );
+  openModal(modal);
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 const main = el('div', { class: 'main' }, canvasWrap, previewPane);
 app.replaceChildren(ribbon(), main);
-previewPane.classList.add('hidden');
+mountEditor(initial.content);
 renderRibbon();
-rebuildCanvas();

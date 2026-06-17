@@ -1,7 +1,7 @@
-// Templates are just saved Docs (logic layer + starter content). This is the
-// payoff of owning a structured model: the template library is trivial data.
+// Templates = a saved logic layer + a ProseMirror content document (as JSON).
+// Owning a structured model makes the template library trivial data.
 
-import type { Doc } from './model';
+import type { DocLogic } from './model';
 import { uid } from './model';
 
 export type TemplateIcon = 'file' | 'mail' | 'chart' | 'receipt' | 'notes';
@@ -9,116 +9,129 @@ export type TemplateIcon = 'file' | 'mail' | 'chart' | 'receipt' | 'notes';
 export interface Template {
   id: string;
   label: string;
-  icon: TemplateIcon; // resolved to an inline SVG in the picker
+  icon: TemplateIcon;
   description: string;
-  keywords: string; // extra search terms
-  make: () => Doc;
+  keywords: string;
+  make: () => { logic: DocLogic; content: object };
 }
 
-function blank(): Doc {
+// --- tiny ProseMirror-JSON builders ------------------------------------------
+type J = Record<string, unknown>;
+function txt(text: string, marks?: string[]): J {
+  return marks?.length ? { type: 'text', text, marks: marks.map((m) => ({ type: m })) } : { type: 'text', text };
+}
+function p(...content: (J | string)[]): J {
+  return { type: 'paragraph', content: content.map((c) => (typeof c === 'string' ? txt(c) : c)).filter(Boolean) };
+}
+function h(level: number, text: string): J {
+  return { type: 'heading', attrs: { level }, content: [txt(text)] };
+}
+function li(...content: J[]): J {
+  return { type: 'listItem', content };
+}
+function bullet(...items: string[]): J {
+  return { type: 'bulletList', content: items.map((t) => li(p(t))) };
+}
+function ordered(...items: string[]): J {
+  return { type: 'orderedList', attrs: { start: 1 }, content: items.map((t) => li(p(t))) };
+}
+function callout(...content: J[]): J {
+  return { type: 'callout', content };
+}
+function raw(code: string): J {
+  return { type: 'codeBlock', content: [txt(code)] };
+}
+function doc(...content: J[]): object {
+  return { type: 'doc', content };
+}
+
+function baseStyle(justify: boolean): DocLogic['style'] {
   return {
-    style: {
-      page: { paper: 'a4', marginCm: 2.5 },
-      text: { font: '', sizePt: 11 },
-      par: { leadingEm: 0.65, justify: true },
-    },
-    lets: [],
-    content: [
-      { id: uid(), type: 'heading', level: 1, text: 'Untitled document' },
-      { id: uid(), type: 'paragraph', text: 'Start writing here.' },
-    ],
+    page: { paper: 'a4', marginCm: 2.5 },
+    text: { font: '', sizePt: 11 },
+    par: { leadingEm: 0.65, justify },
   };
 }
 
-function letter(): Doc {
+// --- templates ---------------------------------------------------------------
+function blank() {
   return {
-    style: {
-      page: { paper: 'us-letter', marginCm: 3 },
-      text: { font: '', sizePt: 11 },
-      par: { leadingEm: 0.7, justify: false },
-    },
-    lets: [{ id: uid(), name: 'sender', kind: 'value', code: '"Ortic AG, Zurich"' }],
-    content: [
-      { id: uid(), type: 'raw', code: '#align(right)[#sender]' },
-      { id: uid(), type: 'paragraph', text: 'Dear Sir or Madam,' },
-      {
-        id: uid(),
-        type: 'paragraph',
-        text: 'Thank you for your interest. I am writing to follow up on our recent conversation.',
-      },
-      { id: uid(), type: 'paragraph', text: 'Kind regards,' },
-      { id: uid(), type: 'raw', code: '#sender' },
-    ],
+    logic: { style: baseStyle(true), lets: [], shows: [] },
+    content: doc(h(1, 'Untitled document'), p('Start writing here.')),
   };
 }
 
-function report(): Doc {
+function letter() {
   return {
-    style: {
-      page: { paper: 'a4', marginCm: 2.5 },
-      text: { font: '', sizePt: 11 },
-      par: { leadingEm: 0.65, justify: true },
+    logic: {
+      style: { ...baseStyle(false), page: { paper: 'us-letter' as const, marginCm: 3 } },
+      lets: [{ id: uid('let'), name: 'sender', kind: 'value' as const, code: '"Ortic AG, Zurich"' }],
+      shows: [],
     },
-    lets: [],
-    content: [
-      { id: uid(), type: 'heading', level: 1, text: 'Quarterly Report' },
-      { id: uid(), type: 'paragraph', text: 'This report summarizes the results for the quarter.' },
-      { id: uid(), type: 'heading', level: 2, text: 'Highlights' },
-      {
-        id: uid(),
-        type: 'list',
-        ordered: false,
-        items: ['Revenue up 12%', 'Two new customers onboarded', 'Shipped the v1 release'],
-      },
-      {
-        id: uid(),
-        type: 'callout',
-        text: 'Action required: review the budget before the next board meeting.',
-      },
-      { id: uid(), type: 'heading', level: 2, text: 'Details' },
-      { id: uid(), type: 'paragraph', text: 'See the appendix for the full breakdown.' },
-    ],
+    content: doc(
+      raw('#align(right)[#sender]'),
+      p('Dear Sir or Madam,'),
+      p('Thank you for your interest. I am writing to follow up on our recent conversation.'),
+      p('Kind regards,'),
+      raw('#sender'),
+    ),
   };
 }
 
-function invoice(): Doc {
+function report() {
   return {
-    style: {
-      page: { paper: 'a4', marginCm: 2.5 },
-      text: { font: '', sizePt: 11 },
-      par: { leadingEm: 0.65, justify: false },
+    logic: {
+      style: baseStyle(true),
+      lets: [],
+      shows: [
+        {
+          id: uid('show'),
+          target: 'heading' as const,
+          level: 1,
+          props: { fill: '#1c7ed6', sizePt: null, weight: 'bold' as const, style: 'inherit' as const },
+        },
+      ],
     },
-    lets: [{ id: uid(), name: 'company', kind: 'value', code: '"Ortic AG"' }],
-    content: [
-      { id: uid(), type: 'raw', code: '#align(right)[#text(weight: "bold", size: 14pt)[#company]]' },
-      { id: uid(), type: 'heading', level: 1, text: 'Invoice' },
-      { id: uid(), type: 'paragraph', text: 'Invoice #2026-001 · Date: 2026-06-17' },
-      {
-        id: uid(),
-        type: 'raw',
-        code: '#table(\n  columns: (1fr, auto, auto),\n  [*Item*], [*Qty*], [*Price*],\n  [Consulting], [10], [\\$1,500],\n  [License], [1], [\\$500],\n)',
-      },
-      { id: uid(), type: 'callout', text: 'Payment due within 30 days.' },
-    ],
+    content: doc(
+      h(1, 'Quarterly Report'),
+      p('This report summarizes the results for the quarter. Highlights are ', txt('strong', ['bold']), ' this period.'),
+      h(2, 'Highlights'),
+      bullet('Revenue up 12%', 'Two new customers onboarded', 'Shipped the v1 release'),
+      callout(p('Action required: review the budget before the next board meeting.')),
+      h(2, 'Details'),
+      p('See the appendix for the full breakdown.'),
+    ),
   };
 }
 
-function meetingNotes(): Doc {
+function invoice() {
   return {
-    style: {
-      page: { paper: 'a4', marginCm: 2.5 },
-      text: { font: '', sizePt: 11 },
-      par: { leadingEm: 0.65, justify: false },
+    logic: {
+      style: baseStyle(false),
+      lets: [{ id: uid('let'), name: 'company', kind: 'value' as const, code: '"Ortic AG"' }],
+      shows: [],
     },
-    lets: [],
-    content: [
-      { id: uid(), type: 'heading', level: 1, text: 'Meeting Notes' },
-      { id: uid(), type: 'paragraph', text: 'Date: 2026-06-17 · Attendees: …' },
-      { id: uid(), type: 'heading', level: 2, text: 'Agenda' },
-      { id: uid(), type: 'list', ordered: true, items: ['Topic one', 'Topic two'] },
-      { id: uid(), type: 'heading', level: 2, text: 'Action items' },
-      { id: uid(), type: 'list', ordered: false, items: ['Owner — task — due date'] },
-    ],
+    content: doc(
+      raw('#align(right)[#text(weight: "bold", size: 14pt)[#company]]'),
+      h(1, 'Invoice'),
+      p('Invoice #2026-001 · Date: 2026-06-17'),
+      raw('#table(\n  columns: (1fr, auto, auto),\n  [*Item*], [*Qty*], [*Price*],\n  [Consulting], [10], [\\$1,500],\n  [License], [1], [\\$500],\n)'),
+      callout(p('Payment due within 30 days.')),
+    ),
+  };
+}
+
+function meetingNotes() {
+  return {
+    logic: { style: baseStyle(false), lets: [], shows: [] },
+    content: doc(
+      h(1, 'Meeting Notes'),
+      p('Date: 2026-06-17 · Attendees: …'),
+      h(2, 'Agenda'),
+      ordered('Topic one', 'Topic two'),
+      h(2, 'Action items'),
+      bullet('Owner — task — due date'),
+    ),
   };
 }
 

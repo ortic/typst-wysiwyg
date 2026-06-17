@@ -1,58 +1,53 @@
-// The document model the editor OWNS. This — not Typst text — is the source of
-// truth. We serialize one-way to .typ (see generate.ts). There is no Typst
-// parser here on purpose: for now we only create new documents.
+// The LOGIC layer the editor owns. The CONTENT layer now lives in a ProseMirror
+// document (via TipTap) — see editor.ts / serialize.ts — which gives us robust
+// selection, clipboard, undo/redo and inline marks for free.
 //
-// The model is split into two layers, matching the product concept:
-//   - the LOGIC/STYLE layer (style + lets): #set / #let, managed via inspectors
-//   - the CONTENT layer (blocks): the WYSIWYG body
-//
-// A "normal" user touches the content layer and a few style fields. A power
-// user opens the definitions panel and the raw-code escape hatch.
+// A document = this logic layer + a ProseMirror content doc. We serialize both
+// one-way to .typ (see generate.ts). There is still no Typst parser.
 
 export type PageSize = 'a4' | 'us-letter' | 'a5';
 
 export interface DocStyle {
-  page: {
-    paper: PageSize;
-    marginCm: number;
-  };
-  text: {
-    /** Empty string => Typst default font. */
-    font: string;
-    sizePt: number;
-  };
-  par: {
-    leadingEm: number;
-    justify: boolean;
-  };
+  page: { paper: PageSize; marginCm: number };
+  text: { font: string; sizePt: number }; // empty font => Typst default
+  par: { leadingEm: number; justify: boolean };
 }
 
 /**
- * A #let binding in the logic layer.
- *  - kind 'value':     `#let name = <expr>`        (e.g. company = "Ortic")
- *  - kind 'component': `#let name(body) = { ... }`  (a reusable block)
- * For the spike, `expr` / `body` hold a raw Typst expression. In the real
- * product these get their own structured editors; the data shape stays.
+ * A #let binding.
+ *  - 'value':     `#let name = <expr>`
+ *  - 'component': `#let name(body) = { ... }`
  */
 export interface LetBinding {
   id: string;
   name: string;
   kind: 'value' | 'component';
-  /** For 'value': the expression. For 'component': the body (receives `body`). */
   code: string;
 }
 
-export type Block =
-  | { id: string; type: 'heading'; level: 1 | 2 | 3; text: string }
-  | { id: string; type: 'paragraph'; text: string }
-  | { id: string; type: 'list'; ordered: boolean; items: string[] }
-  | { id: string; type: 'callout'; text: string } // uses a built-in component
-  | { id: string; type: 'raw'; code: string };    // power-user escape hatch
+/**
+ * A structured #show rule: "when <target> [matches], set these text props".
+ * Emits e.g. `#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"))`.
+ */
+export type ShowTarget = 'heading' | 'strong' | 'emph' | 'link' | 'raw';
 
-export interface Doc {
+export interface ShowRule {
+  id: string;
+  target: ShowTarget;
+  level: number | null; // only meaningful for heading; null = all levels
+  props: {
+    fill: string;       // '' or hex like #1c7ed6
+    sizePt: number | null;
+    weight: 'inherit' | 'regular' | 'bold';
+    style: 'inherit' | 'normal' | 'italic';
+  };
+}
+
+/** The non-content part of a document (content is the ProseMirror doc). */
+export interface DocLogic {
   style: DocStyle;
   lets: LetBinding[];
-  content: Block[];
+  shows: ShowRule[];
 }
 
 let counter = 0;
