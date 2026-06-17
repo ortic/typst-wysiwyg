@@ -168,10 +168,12 @@ and caption for re-export. There are **golden round-trip serializer tests**
 (`npm test`). What's left:
 
 - **Per-section page setups** (different paper/margins mid-document).
-- **Engineering**: compile in a web worker for large documents. (Compile errors are
-  already located heuristically — the embedded compiler only emits opaque span IDs,
-  not source ranges, so a precise error→block map isn't possible via its snippet API;
-  instead the offending identifier is matched against raw/math blocks to offer a jump.)
+
+Compilation runs in a **Web Worker**, so even large documents never block typing
+or scrolling. Compile errors are located heuristically — the embedded compiler
+only emits opaque span IDs, not source ranges, so a precise error→block map
+isn't possible via its snippet API; instead the offending identifier is matched
+against raw/math blocks to offer a jump.
 - **Explicitly deferred**: real-time collaboration (single-user, local-first for now).
 
 ## License

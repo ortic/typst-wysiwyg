@@ -1,59 +1,57 @@
-// Thin wrapper around typst.ts (the Typst compiler+renderer compiled to WASM).
-// We hand it generated source and get back an SVG string for the preview.
+// Main-thread client for the Typst compiler, which actually runs in a Web
+// Worker (typst.worker.ts) so large compiles never block the UI. The exported
+// API is unchanged — every call posts a request and awaits the worker's reply.
 
-import { $typst } from '@myriaddreamin/typst.ts/dist/esm/contrib/snippet.mjs';
-// Vite resolves these to asset URLs the WASM loaders can fetch.
-import compilerWasm from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url';
-import rendererWasm from '@myriaddreamin/typst-ts-renderer/pkg/typst_ts_renderer_bg.wasm?url';
+import type { TypstRequest, TypstResponse } from './typst.worker';
 import { assets } from './assets';
 
-let initialized = false;
+let worker: Worker | undefined;
+let nextId = 1;
+const pending = new Map<number, { resolve: (v: never) => void; reject: (e: unknown) => void }>();
 
-function init(): void {
-  if (initialized) return;
-  $typst.setCompilerInitOptions({ getModule: () => compilerWasm });
-  $typst.setRendererInitOptions({ getModule: () => rendererWasm });
-  initialized = true;
+function getWorker(): Worker {
+  if (worker) return worker;
+  worker = new Worker(new URL('./typst.worker.ts', import.meta.url), { type: 'module' });
+  worker.onmessage = (ev: MessageEvent<TypstResponse>) => {
+    const res = ev.data;
+    const slot = pending.get(res.id);
+    if (!slot) return;
+    pending.delete(res.id);
+    if (res.ok) slot.resolve((('svg' in res ? res.svg : res.pdf) as unknown) as never);
+    else slot.reject(res.error);
+  };
+  worker.onerror = (e) => {
+    // A worker-level failure rejects everything in flight.
+    for (const [, slot] of pending) slot.reject(e.message || 'Typst worker error');
+    pending.clear();
+  };
+  return worker;
 }
 
-/** Make the current image assets available to the compiler's virtual FS. */
-async function syncAssets(): Promise<void> {
-  for (const [path, bytes] of assets) await $typst.mapShadow(path, bytes);
+/** Snapshot the current VFS assets to ship alongside the compile request. */
+function assetSnapshot(): [string, Uint8Array][] {
+  return [...assets.entries()];
 }
 
-// A single WASM compiler instance is shared by the main preview and by every
-// live math field, so serialize all compile calls to avoid interleaving them.
-let queue: Promise<unknown> = Promise.resolve();
-function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-  const run = queue.then(fn, fn);
-  queue = run.then(() => undefined, () => undefined);
-  return run;
+function request<T>(kind: TypstRequest['kind'], source: string): Promise<T> {
+  const id = nextId++;
+  const req: TypstRequest = { id, kind, source, assets: assetSnapshot() };
+  return new Promise<T>((resolve, reject) => {
+    pending.set(id, { resolve: resolve as (v: never) => void, reject });
+    getWorker().postMessage(req);
+  });
 }
 
 export function renderSvg(source: string): Promise<string> {
-  return enqueue(async () => {
-    init();
-    await syncAssets();
-    return $typst.svg({ mainContent: source });
-  });
+  return request<string>('svg', source);
 }
 
 export function renderPdf(source: string): Promise<Uint8Array> {
-  return enqueue(async () => {
-    init();
-    await syncAssets();
-    const bytes = await $typst.pdf({ mainContent: source });
-    if (!bytes) throw new Error('PDF generation returned no data');
-    return bytes;
-  });
+  return request<Uint8Array>('pdf', source);
 }
 
 /** Render a tightly-cropped fragment (e.g. a single equation) to SVG. */
 export function renderFragmentSvg(body: string): Promise<string> {
-  return enqueue(async () => {
-    init();
-    await syncAssets();
-    const src = `#set page(width: auto, height: auto, margin: 3pt)\n#set text(size: 13pt)\n${body}`;
-    return $typst.svg({ mainContent: src });
-  });
+  const src = `#set page(width: auto, height: auto, margin: 3pt)\n#set text(size: 13pt)\n${body}`;
+  return request<string>('fragment', src);
 }
