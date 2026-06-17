@@ -94,13 +94,55 @@ The first load fetches a ~28 MB WASM compiler; give it a moment on a cold start.
 | `src/templates.ts` | Templates (logic layer + ProseMirror content), picker icons |
 | `src/main.ts` | Ribbon, modals, preview, export — the UI shell |
 
-## Known limitations / next steps
+## Roadmap / next steps
 
-- No import of existing `.typ` (the model is generated one-way only).
-- The `#show` editor covers common text restyling; full function-style show rules
-  (`#show heading: it => …`) still need the raw-Typst escape hatch.
-- No desktop packaging yet (a Tauri shell is the intended path).
-- No image/figure or table block yet (tables can be done via raw Typst).
+Roughly in priority order. The first group is the most-requested missing content.
+
+### Rich content blocks (highest priority)
+
+- **Tables** — an editable table block (add/remove rows & columns, header row,
+  alignment) serialized to Typst `#table(...)`. Today tables are only possible via the
+  raw-Typst escape hatch.
+- **Pictures / images** — an image block with upload/drag-in, plus asset handling, and a
+  **figure** wrapper (caption + label) → `#figure(image("..."), caption: [...])`.
+- **Equations / math** — inline and block math editing → Typst `$ ... $`, ideally with a
+  live-rendered math field rather than raw markup.
+- **Footnotes, references and citations** — `#footnote[...]`, labels + cross-references
+  (`<label>` / `@ref`), and `#cite` / `#bibliography`.
+- **Page breaks, columns and code listings** — `#pagebreak()`, multi-column layout, and
+  a real (display) code block distinct from the raw-Typst escape hatch.
+
+### Editing experience
+
+- **Slash menu** (`/`) and a selection bubble toolbar for fast block/inline insertion.
+- **Drag-to-reorder** blocks from the six-dot handle (currently move up/down only).
+- **Find & replace**, and a document **outline / table-of-contents** panel (`#outline()`).
+
+### Document & logic layer
+
+- **Full function-style `#show` rules** (`#show heading: it => …`); the structured editor
+  covers common text restyling, the rest still needs the raw-Typst escape hatch.
+- **Headers/footers and page numbering**, font/color pickers, and per-section page setups.
+
+### Persistence & app
+
+- **Save / load** documents (state is currently in-memory only) with autosave.
+- **Import of existing `.typ`** — the model is generated one-way today; import needs a
+  parser and will be tightly scoped.
+- **User templates** — save the current document as a reusable template.
+- **Desktop packaging** via a **Tauri** shell (local fonts, file system, offline).
+
+### Engineering / hardening
+
+- **Harden the serializer** and add golden round-trip tests — known rough edges include
+  `code`-marked text not being escaped inside backticks, deeply nested lists, and unusual
+  selections.
+- **Map Typst compiler errors back to blocks** instead of showing a raw message.
+- **Compile in a web worker** and tune debouncing for large documents.
+
+### Explicitly deferred
+
+- **Real-time collaboration** — out of scope for now (single-user, local-first).
 
 ## License
 
