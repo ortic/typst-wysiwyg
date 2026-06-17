@@ -94,6 +94,8 @@ select, input[type=text], input[type=number], textarea {
   font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
 .page pre code { font: inherit; color: inherit; }
 .page code { background: #eef0f4; border-radius: 3px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: .9em; }
+.page img { max-width: 80%; height: auto; display: block; margin: 0 0 .9em; border-radius: 2px; }
+.page img.ProseMirror-selectednode { outline: 2px solid #a8aef2; }
 .ProseMirror-selectednode { outline: 2px solid #a8aef2; }
 
 /* tables */

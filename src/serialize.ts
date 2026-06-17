@@ -94,6 +94,13 @@ function serializeBlock(node: PMNode): string {
     }
     case 'table':
       return serializeTable(node);
+    case 'image': {
+      const path = (node.attrs.path as string) || (node.attrs.src as string) || '';
+      if (!path || path.startsWith('data:')) return ''; // need a real VFS path
+      const alt = (node.attrs.alt as string) || '';
+      const img = `image(${quote(path)}, width: 80%)`;
+      return alt ? `#figure(${img}, caption: [${escapeMarkup(alt)}])` : `#${img}`;
+    }
     default:
       return inline(node);
   }

@@ -8,6 +8,7 @@ import { TEMPLATES, TEMPLATE_ICONS } from './templates';
 import { highlightTypst } from './highlight';
 import { createEditor } from './editor';
 import { installBlockHandle } from './blockhandle';
+import { addAsset } from './assets';
 
 // ---------------------------------------------------------------------------
 // State
@@ -91,6 +92,35 @@ function setLink(): void {
   else editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
 }
 
+// Hidden file input reused for every image insert.
+const imageInput = el('input', { type: 'file', accept: 'image/*' }) as HTMLInputElement;
+imageInput.style.display = 'none';
+document.body.appendChild(imageInput);
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+function pickImage(): void {
+  imageInput.value = '';
+  imageInput.onchange = async () => {
+    const file = imageInput.files?.[0];
+    if (!file) return;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const ext = file.name.split('.').pop() || 'png';
+    const path = addAsset(bytes, ext); // bytes go to the Typst VFS; path is referenced
+    const src = await readDataUrl(file); // data URL only for editor display
+    editor.chain().focus().insertContent({ type: 'image', attrs: { src, path, alt: '' } }).run();
+    schedulePreview();
+  };
+  imageInput.click();
+}
+
 // ---------------------------------------------------------------------------
 // Ribbon
 // ---------------------------------------------------------------------------
@@ -138,6 +168,7 @@ function rbtn(icon: string, label: string, onClick: () => void, active = false):
 
 const LINK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';
 const TABLE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>';
+const IMAGE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -204,6 +235,7 @@ function ribbonGroups(): Node[] {
         ),
         group('Insert',
           rbtn(TABLE_ICON, 'Table', () => cmd((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))),
+          rbtn(IMAGE_ICON, 'Image', pickImage),
         ),
       ];
       if (editor.isActive('table')) {

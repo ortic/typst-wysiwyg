@@ -16,6 +16,22 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
+import Image from '@tiptap/extension-image';
+
+// Image node carries an extra `path` attribute: the Typst VFS path whose bytes
+// live in assets.ts. The `src` (a data URL) is only for display in the editor.
+const TypstImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      path: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-path'),
+        renderHTML: (attrs) => (attrs.path ? { 'data-path': attrs.path } : {}),
+      },
+    };
+  },
+});
 
 export const Callout = Node.create({
   name: 'callout',
@@ -48,6 +64,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       TableRow,
       TableHeader,
       TableCell,
+      TypstImage.configure({ allowBase64: true }),
       Placeholder.configure({
         // Only the top-level empty block gets a hint — not every empty cell.
         includeChildren: false,
