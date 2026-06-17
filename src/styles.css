@@ -119,6 +119,16 @@ select, input[type=text], input[type=number], textarea {
 .page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
 .page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
 
+/* outline panel */
+.outline { width: 240px; flex: none; overflow: auto; background: #fff; border-right: 1px solid #d3d7df; padding: 14px 12px; }
+.outline.hidden { display: none; }
+.outline-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; margin-bottom: 8px; }
+.outline-item { padding: 4px 6px; border-radius: 5px; cursor: pointer; color: #353b49; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-item:hover { background: #eef0f4; }
+.outline-item.lvl1 { font-weight: 600; }
+.outline-item.lvl2 { padding-left: 18px; }
+.outline-item.lvl3 { padding-left: 32px; color: #6b7280; }
+
 /* find & replace */
 .search-match { background: #fde68a; border-radius: 2px; }
 .search-current { background: #fb923c; border-radius: 2px; color: #1e2330; }

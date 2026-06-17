@@ -91,9 +91,36 @@ const canvasWrap = el('div', { class: 'canvas-wrap' });
 const pageEl = el('div', { class: 'page' });
 canvasWrap.append(pageEl);
 
+// Outline / table-of-contents panel (left of the canvas).
+const outlinePanel = el('aside', { class: 'outline hidden' });
+let outlineVisible = false;
+
+function rebuildOutline(): void {
+  if (!outlineVisible) return;
+  const items: HTMLElement[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'heading') return;
+    const level = node.attrs.level as number;
+    const row = el('div', { class: `outline-item lvl${level}` }, node.textContent || '(empty heading)');
+    row.onclick = () => editor.chain().focus().setTextSelection(pos + 1).scrollIntoView().run();
+    items.push(row);
+  });
+  outlinePanel.replaceChildren(
+    el('div', { class: 'outline-title' }, 'Outline'),
+    ...(items.length ? items : [el('div', { class: 'muted', style: 'padding:6px 4px' }, 'No headings yet.')]),
+  );
+}
+
+function toggleOutline(): void {
+  outlineVisible = !outlineVisible;
+  outlinePanel.classList.toggle('hidden', !outlineVisible);
+  renderRibbon();
+  rebuildOutline();
+}
+
 function mountEditor(content: object): void {
   editor = createEditor(pageEl, content as never, {
-    onUpdate: () => { schedulePreview(); syncContextualTabs(); },
+    onUpdate: () => { schedulePreview(); syncContextualTabs(); rebuildOutline(); },
     onSelection: syncContextualTabs,
   }, SLASH_ITEMS);
   installBlockHandle(editor, pageEl);
@@ -331,7 +358,10 @@ function ribbonGroups(): Node[] {
       ];
     case 'view':
       return [
-        group('Show', rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible)),
+        group('Show',
+          rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible),
+          rbtn('☰', 'Outline', toggleOutline, outlineVisible),
+        ),
         group('Find', rbtn(SEARCH_ICON, 'Find & replace', openFindBar)),
         group('Source', rbtn('</>', 'Typst source', openSourceModal)),
       ];
@@ -824,7 +854,7 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------------------
 // Boot — restore the last session if one was autosaved, else the default doc.
 // ---------------------------------------------------------------------------
-const main = el('div', { class: 'main' }, canvasWrap, previewPane);
+const main = el('div', { class: 'main' }, outlinePanel, canvasWrap, previewPane);
 app.replaceChildren(ribbon(), main);
 
 const restored = loadSaved();
