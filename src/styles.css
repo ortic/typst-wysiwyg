@@ -21,13 +21,11 @@ select, input[type=text], input[type=number], textarea {
 
 /* ---- ribbon ---- */
 .ribbon { background: #f3f4f7; border-bottom: 1px solid #d0d4dc; user-select: none; }
-.titlebar {
-  display: flex; align-items: baseline; gap: 8px;
-  background: #1e2330; color: #fff; padding: 6px 14px;
-}
-.titlebar .app { font-weight: 600; font-size: 13px; }
 
-.tabstrip { display: flex; gap: 2px; padding: 4px 8px 0; }
+.tabstrip { display: flex; align-items: center; gap: 2px; padding: 4px 8px 0; }
+.tab-spacer { flex: 1; }
+.brand { display: flex; align-items: baseline; gap: 6px; padding: 0 6px 4px; }
+.brand .app { font-weight: 600; font-size: 13px; color: #1e2330; }
 .tab {
   border: none; background: none; padding: 6px 14px; border-radius: 6px 6px 0 0;
   color: #4b5563; font-size: 13px; cursor: pointer;
@@ -97,6 +95,15 @@ select, input[type=text], input[type=number], textarea {
 .page pre code { font: inherit; color: inherit; }
 .page code { background: #eef0f4; border-radius: 3px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: .9em; }
 .ProseMirror-selectednode { outline: 2px solid #a8aef2; }
+
+/* tables */
+.page table { border-collapse: collapse; margin: 0 0 .9em; width: 100%; table-layout: fixed; overflow: hidden; }
+.page table td, .page table th { border: 1px solid #cdd2dc; padding: 5px 8px; vertical-align: top; position: relative; }
+.page table th { background: #f3f4f7; font-weight: 700; text-align: left; }
+.page table p { margin: 0; }
+.page .selectedCell:after { content: ''; position: absolute; inset: 0; background: rgba(79,70,229,.12); pointer-events: none; }
+.page .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: #6366f1; pointer-events: none; }
+.ProseMirror.resize-cursor { cursor: col-resize; }
 
 /* six-dot block handle + its menu */
 .pm-handle {

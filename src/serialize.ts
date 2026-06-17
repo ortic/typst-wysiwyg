@@ -92,9 +92,65 @@ function serializeBlock(node: PMNode): string {
       const inner = childrenBlocks(node).join('\n\n');
       return `#callout[\n${indentLines(inner, '  ')}\n]`;
     }
+    case 'table':
+      return serializeTable(node);
     default:
       return inline(node);
   }
+}
+
+/** A table cell's content as a Typst `[...]` (or `table.cell(..)[...]`) argument. */
+function serializeCell(cell: PMNode): string {
+  const blocks = childrenBlocks(cell);
+  const content = blocks.length === 1 ? blocks[0] : blocks.join('\n\n');
+  const colspan = (cell.attrs.colspan as number) ?? 1;
+  const rowspan = (cell.attrs.rowspan as number) ?? 1;
+  if (colspan > 1 || rowspan > 1) {
+    const spans: string[] = [];
+    if (colspan > 1) spans.push(`colspan: ${colspan}`);
+    if (rowspan > 1) spans.push(`rowspan: ${rowspan}`);
+    return `table.cell(${spans.join(', ')})[${content}]`;
+  }
+  return `[${content}]`;
+}
+
+/**
+ * Build the Typst `columns:` spec. We use fractional (`fr`) widths so the table
+ * fills the page width like it does in the editor. Resized columns keep their
+ * proportions; otherwise columns are equal (`1fr`).
+ */
+function tableColumns(firstRow: PMNode): string {
+  const widths: (number | null)[] = [];
+  firstRow.forEach((cell) => {
+    const cw = cell.attrs.colwidth as number[] | null;
+    const span = (cell.attrs.colspan as number) ?? 1;
+    for (let i = 0; i < span; i++) widths.push(cw && cw[i] ? cw[i] : null);
+  });
+  const spec = widths.some((w) => w == null)
+    ? widths.map(() => '1fr')
+    : widths.map((w) => `${w}fr`);
+  return `(${spec.join(', ')})`;
+}
+
+function serializeTable(node: PMNode): string {
+  const rows: PMNode[] = [];
+  node.forEach((r) => rows.push(r));
+  if (!rows.length) return '#table()';
+
+  const lines: string[] = [`#table(`, `  columns: ${tableColumns(rows[0])},`];
+  for (const row of rows) {
+    const cells: string[] = [];
+    let allHeader = row.childCount > 0;
+    row.forEach((cell) => {
+      if (cell.type.name !== 'tableHeader') allHeader = false;
+      cells.push(serializeCell(cell));
+    });
+    // A full header row uses Typst's `table.header(...)` for proper semantics.
+    if (allHeader) lines.push(`  table.header(${cells.join(', ')}),`);
+    else lines.push(`  ${cells.join(', ')},`);
+  }
+  lines.push(`)`);
+  return lines.join('\n');
 }
 
 function childrenBlocks(node: PMNode): string[] {

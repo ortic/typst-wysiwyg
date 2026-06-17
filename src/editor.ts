@@ -12,6 +12,10 @@ import { Editor, Node, mergeAttributes, type Content } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
 
 export const Callout = Node.create({
   name: 'callout',
@@ -40,8 +44,13 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
         // codeBlock is kept and reused as the raw-Typst block.
       }),
       Link.configure({ openOnClick: false, autolink: true }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Placeholder.configure({
-        includeChildren: true,
+        // Only the top-level empty block gets a hint — not every empty cell.
+        includeChildren: false,
         placeholder: ({ node }) => {
           if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
           if (node.type.name === 'codeBlock') return 'Raw Typst…';

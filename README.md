@@ -52,6 +52,8 @@ an icon.
 - **ProseMirror-backed WYSIWYG editing** with real selection, clipboard, undo/redo and
   markdown-style input rules.
 - **Inline formatting**: bold, italic, strike, links.
+- **Tables** — editable (add/remove rows & columns, resizable), full-width, serialized
+  to `#table(...)`.
 - **Block handle** (⠿) for changing block type, moving, inserting and deleting.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
@@ -100,9 +102,7 @@ Roughly in priority order. The first group is the most-requested missing content
 
 ### Rich content blocks (highest priority)
 
-- **Tables** — an editable table block (add/remove rows & columns, header row,
-  alignment) serialized to Typst `#table(...)`. Today tables are only possible via the
-  raw-Typst escape hatch.
+- ✅ **Tables** — done (editable, resizable, full-width, `#table(...)`).
 - **Pictures / images** — an image block with upload/drag-in, plus asset handling, and a
   **figure** wrapper (caption + label) → `#figure(image("..."), caption: [...])`.
 - **Equations / math** — inline and block math editing → Typst `$ ... $`, ideally with a

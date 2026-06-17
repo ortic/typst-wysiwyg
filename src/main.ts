@@ -66,9 +66,10 @@ const pageEl = el('div', { class: 'page' });
 canvasWrap.append(pageEl);
 
 function mountEditor(content: object): void {
+  const refreshContextual = () => { if (activeTab === 'home' || activeTab === 'insert') renderRibbon(); };
   editor = createEditor(pageEl, content as never, {
-    onUpdate: () => { schedulePreview(); if (activeTab === 'home') renderRibbon(); },
-    onSelection: () => { if (activeTab === 'home') renderRibbon(); },
+    onUpdate: () => { schedulePreview(); refreshContextual(); },
+    onSelection: refreshContextual,
   });
   installBlockHandle(editor, pageEl);
   syncJustify();
@@ -97,10 +98,6 @@ const ribbonBody = el('div', { class: 'ribbon-body' });
 
 function ribbon(): HTMLElement {
   const bar = el('div', { class: 'ribbon' });
-  const title = el('div', { class: 'titlebar' },
-    el('span', { class: 'app' }, 'Typst WYSIWYG'),
-    el('span', { class: 'muted' }, 'spike'),
-  );
   const tabs = el('div', { class: 'tabstrip' });
   const tabDefs: [typeof activeTab, string][] = [
     ['home', 'Home'], ['layout', 'Layout'], ['insert', 'Insert'], ['view', 'View'],
@@ -110,7 +107,12 @@ function ribbon(): HTMLElement {
     t.onclick = () => { activeTab = id; renderRibbon(); };
     tabs.append(t);
   }
-  bar.append(title, tabs, ribbonBody);
+  // Brand sits on the right of the tab row — no separate title bar.
+  tabs.append(
+    el('span', { class: 'tab-spacer' }),
+    el('span', { class: 'brand' }, el('span', { class: 'app' }, 'Typst WYSIWYG'), el('span', { class: 'muted' }, 'spike')),
+  );
+  bar.append(tabs, ribbonBody);
   return bar;
 }
 
@@ -135,6 +137,7 @@ function rbtn(icon: string, label: string, onClick: () => void, active = false):
 }
 
 const LINK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';
+const TABLE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -189,8 +192,8 @@ function ribbonGroups(): Node[] {
         group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
       ];
     }
-    case 'insert':
-      return [
+    case 'insert': {
+      const groups: Node[] = [
         group('Blocks',
           rbtn('H', 'Heading', () => cmd((c) => c.insertContent({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Heading' }] }))),
           rbtn('¶', 'Text', () => cmd((c) => c.insertContent('<p></p>'))),
@@ -199,11 +202,25 @@ function ribbonGroups(): Node[] {
           rbtn('❝', 'Callout', () => cmd((c) => c.insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }))),
           rbtn('</>', 'Raw Typst', () => cmd((c) => c.insertContent({ type: 'codeBlock', content: [{ type: 'text', text: '#lorem(20)' }] }))),
         ),
-        group('Logic',
-          rbtn('ƒ', 'Definitions', openDefinitionsModal),
-          rbtn('✦', 'Show rules', openShowModal),
+        group('Insert',
+          rbtn(TABLE_ICON, 'Table', () => cmd((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))),
         ),
       ];
+      if (editor.isActive('table')) {
+        groups.push(group('Table',
+          rbtn('▤+', 'Row', () => cmd((c) => c.addRowAfter())),
+          rbtn('▤−', 'Del row', () => cmd((c) => c.deleteRow())),
+          rbtn('▥+', 'Col', () => cmd((c) => c.addColumnAfter())),
+          rbtn('▥−', 'Del col', () => cmd((c) => c.deleteColumn())),
+          rbtn('✕', 'Delete', () => cmd((c) => c.deleteTable())),
+        ));
+      }
+      groups.push(group('Logic',
+        rbtn('ƒ', 'Definitions', openDefinitionsModal),
+        rbtn('✦', 'Show rules', openShowModal),
+      ));
+      return groups;
+    }
     case 'view':
       return [
         group('Show', rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible)),
