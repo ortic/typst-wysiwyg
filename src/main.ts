@@ -987,10 +987,16 @@ function openTemplateModal(): void {
   };
 
   search.oninput = () => draw(search.value);
+  const closeX = el('button', { class: 'modal-x', 'aria-label': 'Close', title: 'Close' }, '✕');
+  closeX.onclick = closeModal;
+  const cancelBtn = el('button', {}, 'Cancel');
+  cancelBtn.onclick = closeModal;
   modal.append(
-    el('div', { class: 'modal-head' }, el('h3', {}, 'New from template'), search),
+    el('div', { class: 'modal-head' },
+      el('div', { class: 'modal-head-row' }, el('h3', {}, 'New from template'), closeX),
+      search),
     grid,
-    el('div', { class: 'modal-foot' }, saveBtn),
+    el('div', { class: 'modal-foot' }, cancelBtn, saveBtn),
   );
   openModal(modal);
   draw('');

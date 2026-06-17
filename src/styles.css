@@ -343,6 +343,9 @@ select, input[type=text], input[type=number], textarea {
 .modal-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .modal-head-row h3 { margin: 0 0 4px; }
 .modal-actions { display: flex; gap: 8px; flex: none; }
+.modal-x { flex: none; border: none; background: transparent; color: #6b7280; font-size: 15px;
+  line-height: 1; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.modal-x:hover { background: #f0f1f4; color: #1e2330; }
 
 .source-wrap { overflow: auto; background: #1e2330; }
 .source-code {
