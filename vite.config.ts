@@ -5,9 +5,9 @@ export default defineConfig(({ command, mode }) => ({
   // - Tauri loads from the bundled files, so use relative paths
   // - dev serves from the root
   base: mode === 'tauri' ? './' : command === 'build' ? '/typst-wysiwyg/' : '/',
-  // A fixed port so Tauri's devUrl matches; don't clear Tauri's terminal output.
+  // Fixed port (Tauri's default) so its devUrl matches; don't clear Tauri output.
   clearScreen: false,
-  server: { port: 5173, strictPort: true },
+  server: { port: 1420, strictPort: true },
   // The typst.ts WASM modules are large; let esbuild leave them as assets.
   optimizeDeps: {
     exclude: [
