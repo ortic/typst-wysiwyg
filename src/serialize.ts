@@ -40,6 +40,7 @@ function inline(node: PMNode): string {
     if (child.isText) out += applyMarks(child.text ?? '', child.marks);
     else if (child.type.name === 'hardBreak') out += ' \\\n';
     else if (child.type.name === 'footnote') out += `#footnote[${escapeMarkup((child.attrs.content as string) || '')}]`;
+    else if (child.type.name === 'mathInline') out += `$${(child.attrs.src as string) || ''}$`;
     else out += inline(child); // defensive
   });
   return out;

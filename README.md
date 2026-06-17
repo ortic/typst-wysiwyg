@@ -58,6 +58,7 @@ an icon.
   to the Typst compiler's virtual filesystem) and serializes to `#image(...)`.
 - **Equations** — a block equation with a live-rendered (Typst-compiled) preview above an
   editable source field; serializes to `$ … $`.
+- **Inline math** — render Typst math at text size inside a paragraph; serializes to `$…$`.
 - **Page breaks** (`#pagebreak()`) and **footnotes** (inline marker + popover editor →
   `#footnote[…]`).
 - **Block handle** (⠿) for changing block type, moving, inserting and deleting.
@@ -115,8 +116,7 @@ Roughly in priority order. The first group is the most-requested missing content
 - ✅ **Images** — done (insert from file; rendered in the preview via the compiler's
   virtual filesystem; `#image(...)`). Still to add: drag-in, resizing, and a **figure**
   wrapper (caption + label) → `#figure(image("..."), caption: [...])`.
-- ✅ **Equations** — done (block math with a live-rendered field, `$ … $`). Still to add:
-  **inline** math within a paragraph.
+- ✅ **Equations** — done (block + inline math, both live-rendered, `$ … $`).
 - ✅ **Footnotes** — done (`#footnote[...]`). Still to add: labels + cross-references
   (`<label>` / `@ref`), and `#cite` / `#bibliography`.
 - **Page breaks, columns and code listings** — ✅ page break (`#pagebreak()`) done; still

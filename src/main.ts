@@ -254,6 +254,7 @@ function ribbonGroups(): Node[] {
           rbtn(TABLE_ICON, 'Table', () => cmd((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))),
           rbtn(IMAGE_ICON, 'Image', pickImage),
           rbtn('√x', 'Equation', () => cmd((c) => c.insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }))),
+          rbtn('x²', 'Inline math', () => cmd((c) => c.insertContent({ type: 'mathInline', attrs: { src: 'x^2' } }))),
           rbtn(PAGEBREAK_ICON, 'Page break', () => cmd((c) => c.insertContent({ type: 'pageBreak' }))),
         ),
         group('References',

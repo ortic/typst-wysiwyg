@@ -18,6 +18,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import Image from '@tiptap/extension-image';
 import { createMathNodeView } from './mathview';
+import { createMathInlineView } from './mathinlineview';
 import { createFootnoteView } from './footnoteview';
 
 // Image node carries an extra `path` attribute: the Typst VFS path whose bytes
@@ -89,6 +90,32 @@ export const MathBlock = Node.create({
   },
   addNodeView() {
     return (props) => createMathNodeView(props as never);
+  },
+});
+
+export const MathInline = Node.create({
+  name: 'mathInline',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      src: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-src') ?? '',
+        renderHTML: (attrs) => ({ 'data-src': attrs.src }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-math-inline]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-math-inline': '', class: 'math-inline' })];
+  },
+  addNodeView() {
+    return (props) => createMathInlineView(props as never);
   },
 });
 
@@ -164,6 +191,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       TableCell,
       TypstImage.configure({ allowBase64: true }),
       MathBlock,
+      MathInline,
       PageBreak,
       Footnote,
       Placeholder.configure({

@@ -107,6 +107,13 @@ select, input[type=text], input[type=number], textarea {
 .page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
 .page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
 
+/* inline math */
+.math-inline { display: inline-block; vertical-align: middle; cursor: pointer; padding: 0 2px; border-radius: 2px; }
+.math-inline:hover { background: #eef0f4; }
+.math-inline.sel { background: #e6e8ff; }
+.math-inline svg { height: 1.05em; width: auto; vertical-align: middle; display: inline-block; }
+.math-inline .math-empty { color: #aab0bb; font-style: italic; }
+
 /* footnote */
 .footnote-marker {
   color: #4f46e5; cursor: pointer; font-weight: 700; font-size: .72em;
