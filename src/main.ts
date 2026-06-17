@@ -345,10 +345,18 @@ function ribbonGroups(): Node[] {
       const just = rbtn(s.par.justify ? '☰' : '≡', 'Justify', () => {
         s.par.justify = !s.par.justify; syncJustify(); renderRibbon(); schedulePreview();
       }, s.par.justify);
+      const pageNums = rbtn('#', 'Page #', () => {
+        s.page.numbering = !s.page.numbering; renderRibbon(); schedulePreview();
+      }, !!s.page.numbering);
       return [
         group('Page', rfield('Paper', paper), rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v)))),
         group('Text', rfield('Font', txtInput(s.text.font, (v) => (s.text.font = v), 'Typst default', 130)), rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v)))),
         group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
+        group('Header & footer',
+          rfield('Header', txtInput(s.page.header ?? '', (v) => (s.page.header = v), 'optional', 130)),
+          rfield('Footer', txtInput(s.page.footer ?? '', (v) => (s.page.footer = v), 'optional', 130)),
+          pageNums,
+        ),
       ];
     }
     case 'insert':

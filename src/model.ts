@@ -8,7 +8,13 @@
 export type PageSize = 'a4' | 'us-letter' | 'a5';
 
 export interface DocStyle {
-  page: { paper: PageSize; marginCm: number };
+  page: {
+    paper: PageSize;
+    marginCm: number;
+    numbering?: boolean; // page numbers in the footer
+    header?: string;     // header text (markup)
+    footer?: string;     // footer text (markup)
+  };
   text: { font: string; sizePt: number }; // empty font => Typst default
   par: { leadingEm: number; justify: boolean };
 }

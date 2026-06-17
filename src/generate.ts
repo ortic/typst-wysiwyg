@@ -3,7 +3,7 @@
 
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { DocLogic, DocStyle, LetBinding, PageSize, ShowRule } from './model';
-import { serializeContent } from './serialize';
+import { serializeContent, escapeMarkup } from './serialize';
 
 const PAPER: Record<PageSize, string> = { a4: 'a4', 'us-letter': 'us-letter', a5: 'a5' };
 
@@ -19,7 +19,11 @@ function color(v: string): string {
 
 function genStyle(style: DocStyle): string {
   const lines: string[] = [];
-  lines.push(`#set page(paper: ${quote(PAPER[style.page.paper])}, margin: ${style.page.marginCm}cm)`);
+  const pageArgs: string[] = [`paper: ${quote(PAPER[style.page.paper])}`, `margin: ${style.page.marginCm}cm`];
+  if (style.page.numbering) pageArgs.push(`numbering: "1"`);
+  if (style.page.header?.trim()) pageArgs.push(`header: [${escapeMarkup(style.page.header.trim())}]`);
+  if (style.page.footer?.trim()) pageArgs.push(`footer: [${escapeMarkup(style.page.footer.trim())}]`);
+  lines.push(`#set page(${pageArgs.join(', ')})`);
   const textArgs: string[] = [`size: ${style.text.sizePt}pt`];
   if (style.text.font.trim() !== '') textArgs.unshift(`font: ${quote(style.text.font.trim())}`);
   lines.push(`#set text(${textArgs.join(', ')})`);
