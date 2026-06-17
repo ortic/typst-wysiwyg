@@ -78,15 +78,15 @@ an icon.
 - **Inline formatting**: bold, italic, strike, inline code, links, **text colour** and
   **highlight**.
 - **Find & replace** (Ctrl/Cmd+F) with highlighted matches, and an **outline / TOC** panel.
-- **Page setup**: paper, margins, font (with suggestions), size, leading, justification,
-  **page numbers, header and footer**.
+- **Page setup**: paper, margins, **multi-column**, font (with suggestions), size, leading,
+  justification, **page numbers, header and footer**.
 - **Save / open `.typ`** by default — the saved file is real Typst source that also
   carries the editable state in a trailing comment, so your own documents round-trip
   exactly; any other `.typ` is imported best-effort (prose structured, the rest kept as
   raw blocks). Plus **autosave** to the browser (Ctrl/Cmd+S), and native file dialogs in
   the desktop build.
-- Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
-  **`#let` definitions** editor.
+- Structured **`#show` rule editor** (restyle headings, emphasis, links, … by set-style
+  or a full `it => …` function, with custom selectors) and a **`#let` definitions** editor.
 - **Live Typst preview** (compiled in the browser via WASM) with friendly compile errors,
   hidden by default and toggled from the View tab.
 - **Typst source viewer** with syntax highlighting (View → Typst source).
@@ -156,16 +156,14 @@ relative (`./`) for the Tauri bundle (`--mode tauri`), and `/` for `npm run dev`
 
 ## Roadmap / next steps
 
-Most of the editor is in place (see Features). What's left:
+Most of the editor is in place (see Features), including **multi-column layout**,
+**function-style `#show` rules**, and a `.typ` importer that structures tables, lists,
+callouts, `#let`/`#show` and inline functions. What's left:
 
 - **References & citations** — labels + cross-references (`<label>` / `@ref`), and
   `#cite` / `#bibliography`.
-- **Multi-column layout** and a dedicated (display) **code listing** block, distinct from
-  the raw-Typst escape hatch.
-- **Richer `.typ` import** — the importer covers prose, lists and callouts and keeps the
-  rest as raw blocks; it could grow to parse tables, figures, `#let`/`#show`, etc.
-- **Full function-style `#show` rules** (`#show heading: it => …`); the structured editor
-  covers common text restyling, the rest still uses the raw-Typst escape hatch.
+- **Figures on import** — external `#image`/`#figure` come in as raw blocks (the image
+  bytes aren't in a plain `.typ`); a dedicated display **code listing** block.
 - **User templates** (save the current document as a template) and **per-section page
   setups**.
 - **Engineering**: golden round-trip serializer tests, map compile errors back to the
