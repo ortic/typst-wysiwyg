@@ -20,6 +20,7 @@ import Image from '@tiptap/extension-image';
 import { createMathNodeView } from './mathview';
 import { createMathInlineView } from './mathinlineview';
 import { createFootnoteView } from './footnoteview';
+import { SlashMenu, type SlashItem } from './slash';
 
 // Image node carries an extra `path` attribute: the Typst VFS path whose bytes
 // live in assets.ts. The `src` (a data URL) is only for display in the editor.
@@ -176,10 +177,11 @@ export interface EditorHooks {
   onSelection: () => void;
 }
 
-export function createEditor(element: HTMLElement, content: Content, hooks: EditorHooks): Editor {
+export function createEditor(element: HTMLElement, content: Content, hooks: EditorHooks, slashItems: SlashItem[]): Editor {
   return new Editor({
     element,
     extensions: [
+      SlashMenu.configure({ items: slashItems }),
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         // codeBlock is kept and reused as the raw-Typst block.

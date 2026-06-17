@@ -9,6 +9,26 @@ import { highlightTypst } from './highlight';
 import { createEditor } from './editor';
 import { installBlockHandle } from './blockhandle';
 import { addAsset } from './assets';
+import type { SlashItem } from './slash';
+
+// The "/" command menu — insert any block by typing. `pickImage` is referenced
+// before its declaration but only called at runtime, so the hoist is fine.
+const SLASH_ITEMS: SlashItem[] = [
+  { title: 'Heading 1', hint: '#', keywords: 'h1 title', run: (e) => e.chain().focus().setHeading({ level: 1 }).run() },
+  { title: 'Heading 2', hint: '##', keywords: 'h2', run: (e) => e.chain().focus().setHeading({ level: 2 }).run() },
+  { title: 'Heading 3', hint: '###', keywords: 'h3 subhead', run: (e) => e.chain().focus().setHeading({ level: 3 }).run() },
+  { title: 'Text', keywords: 'paragraph body', run: (e) => e.chain().focus().setParagraph().run() },
+  { title: 'Bullet list', hint: '-', keywords: 'unordered', run: (e) => e.chain().focus().toggleBulletList().run() },
+  { title: 'Numbered list', hint: '1.', keywords: 'ordered', run: (e) => e.chain().focus().toggleOrderedList().run() },
+  { title: 'Callout', keywords: 'note admonition', run: (e) => e.chain().focus().toggleWrap('callout').run() },
+  { title: 'Table', keywords: 'grid', run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { title: 'Image', keywords: 'picture photo', run: () => pickImage() },
+  { title: 'Equation', keywords: 'math block', run: (e) => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }).run() },
+  { title: 'Inline math', keywords: 'math', run: (e) => e.chain().focus().insertContent({ type: 'mathInline', attrs: { src: 'x^2' } }).run() },
+  { title: 'Footnote', keywords: 'reference note', run: (e) => e.chain().focus().insertContent({ type: 'footnote', attrs: { content: '' } }).run() },
+  { title: 'Page break', keywords: 'pagebreak', run: (e) => e.chain().focus().insertContent({ type: 'pageBreak' }).run() },
+  { title: 'Raw Typst', hint: '</>', keywords: 'code escape', run: (e) => e.chain().focus().toggleCodeBlock().run() },
+];
 
 // ---------------------------------------------------------------------------
 // State
@@ -71,7 +91,7 @@ function mountEditor(content: object): void {
   editor = createEditor(pageEl, content as never, {
     onUpdate: () => { schedulePreview(); syncContextualTabs(); },
     onSelection: syncContextualTabs,
-  });
+  }, SLASH_ITEMS);
   installBlockHandle(editor, pageEl);
   syncJustify();
 }
