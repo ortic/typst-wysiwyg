@@ -97,6 +97,7 @@ function mountEditor(content: object): void {
   }, SLASH_ITEMS);
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
+  installImageDropPaste(pageEl);
   syncJustify();
 }
 
@@ -130,19 +131,47 @@ function readDataUrl(file: File): Promise<string> {
   });
 }
 
+async function insertImageFile(file: File, pos?: number): Promise<void> {
+  if (!file.type.startsWith('image/')) return;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const ext = file.name.split('.').pop() || 'png';
+  const path = addAsset(bytes, ext); // bytes go to the Typst VFS; path is referenced
+  const src = await readDataUrl(file); // data URL only for editor display
+  const content = { type: 'image', attrs: { src, path, alt: '' } };
+  if (pos != null) editor.chain().focus().insertContentAt(pos, content).run();
+  else editor.chain().focus().insertContent(content).run();
+  schedulePreview();
+}
+
 function pickImage(): void {
   imageInput.value = '';
   imageInput.onchange = async () => {
     const file = imageInput.files?.[0];
-    if (!file) return;
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const ext = file.name.split('.').pop() || 'png';
-    const path = addAsset(bytes, ext); // bytes go to the Typst VFS; path is referenced
-    const src = await readDataUrl(file); // data URL only for editor display
-    editor.chain().focus().insertContent({ type: 'image', attrs: { src, path, alt: '' } }).run();
-    schedulePreview();
+    if (file) await insertImageFile(file);
   };
   imageInput.click();
+}
+
+/** Drag image files onto the page, or paste them from the clipboard. */
+function installImageDropPaste(page: HTMLElement): void {
+  page.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); page.classList.add('drag-over'); }
+  });
+  page.addEventListener('dragleave', (e) => { if (e.target === page) page.classList.remove('drag-over'); });
+  page.addEventListener('drop', async (e) => {
+    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'));
+    page.classList.remove('drag-over');
+    if (!files.length) return;
+    e.preventDefault();
+    const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos;
+    for (const file of files) await insertImageFile(file, pos);
+  });
+  page.addEventListener('paste', async (e) => {
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    for (const file of files) await insertImageFile(file);
+  });
 }
 
 // ---------------------------------------------------------------------------

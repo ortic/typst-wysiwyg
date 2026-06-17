@@ -100,9 +100,19 @@ select, input[type=text], input[type=number], textarea {
   font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
 .page pre code { font: inherit; color: inherit; }
 .page code { background: #eef0f4; border-radius: 3px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: .9em; }
-.page img { max-width: 100%; height: auto; display: block; margin: 0 0 .9em; border-radius: 2px; }
+.page img { max-width: 100%; height: auto; display: block; border-radius: 2px; }
 .page img[data-border="true"] { border: 1px solid #888; padding: 2px; }
-.page img.ProseMirror-selectednode { outline: 2px solid #a8aef2; }
+.doc-figure { margin: 0 0 .9em; }
+.doc-figure.selected img { outline: 2px solid #a8aef2; }
+.doc-figcaption {
+  display: none; font-size: .85em; color: #555; text-align: center; margin-top: 5px; outline: none; min-height: 1em;
+}
+.doc-figure.has-caption .doc-figcaption,
+.doc-figure.selected .doc-figcaption,
+.doc-figure:hover .doc-figcaption,
+.doc-figcaption:focus { display: block; }
+.doc-figcaption:empty::before { content: attr(data-placeholder); color: #c2c7d0; }
+.page.drag-over { outline: 2px dashed #6366f1; outline-offset: -6px; }
 
 /* table style options reflected in the editor */
 .page table[data-striped="true"] tr:nth-child(odd) td { background: #f8f9fb; }

@@ -20,6 +20,7 @@ import Image from '@tiptap/extension-image';
 import { createMathNodeView } from './mathview';
 import { createMathInlineView } from './mathinlineview';
 import { createFootnoteView } from './footnoteview';
+import { createImageNodeView } from './imageview';
 import { SlashMenu, type SlashItem } from './slash';
 
 // Image node carries an extra `path` attribute: the Typst VFS path whose bytes
@@ -47,6 +48,9 @@ const TypstImage = Image.extend({
         renderHTML: (attrs) => (attrs.border ? { 'data-border': 'true' } : {}),
       },
     };
+  },
+  addNodeView() {
+    return (props) => createImageNodeView(props as never);
   },
 });
 
