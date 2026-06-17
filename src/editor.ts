@@ -276,46 +276,54 @@ export interface EditorHooks {
   onSelection: () => void;
 }
 
+/**
+ * The full extension list. Pulled out of createEditor so the same schema can be
+ * built headless (via getSchema) for round-trip serializer tests.
+ */
+export function buildExtensions(slashItems: SlashItem[]) {
+  return [
+    Search,
+    Pagination,
+    SlashMenu.configure({ items: slashItems }),
+    StarterKit.configure({
+      heading: false, // replaced by LabeledHeading
+      // codeBlock is kept and reused as the raw-Typst block.
+    }),
+    LabeledHeading.configure({ levels: [1, 2, 3] }),
+    Reference,
+    Link.configure({ openOnClick: false, autolink: true }),
+    TextStyle,
+    Color,
+    Highlight.configure({ multicolor: true }),
+    StyledTable.configure({ resizable: true }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    TypstImage.configure({ allowBase64: true }),
+    MathBlock,
+    MathInline,
+    PageBreak,
+    Footnote,
+    Columns,
+    CodeListing,
+    Placeholder.configure({
+      // Only the top-level empty block gets a hint — not every empty cell.
+      includeChildren: false,
+      placeholder: ({ node }) => {
+        if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
+        if (node.type.name === 'codeBlock') return 'Raw Typst…';
+        if (node.type.name === 'codeListing') return 'Code listing…';
+        return 'Type here, or use the ribbon…';
+      },
+    }),
+    Callout,
+  ];
+}
+
 export function createEditor(element: HTMLElement, content: Content, hooks: EditorHooks, slashItems: SlashItem[]): Editor {
   return new Editor({
     element,
-    extensions: [
-      Search,
-      Pagination,
-      SlashMenu.configure({ items: slashItems }),
-      StarterKit.configure({
-        heading: false, // replaced by LabeledHeading
-        // codeBlock is kept and reused as the raw-Typst block.
-      }),
-      LabeledHeading.configure({ levels: [1, 2, 3] }),
-      Reference,
-      Link.configure({ openOnClick: false, autolink: true }),
-      TextStyle,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      StyledTable.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TypstImage.configure({ allowBase64: true }),
-      MathBlock,
-      MathInline,
-      PageBreak,
-      Footnote,
-      Columns,
-      CodeListing,
-      Placeholder.configure({
-        // Only the top-level empty block gets a hint — not every empty cell.
-        includeChildren: false,
-        placeholder: ({ node }) => {
-          if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
-          if (node.type.name === 'codeBlock') return 'Raw Typst…';
-          if (node.type.name === 'codeListing') return 'Code listing…';
-          return 'Type here, or use the ribbon…';
-        },
-      }),
-      Callout,
-    ],
+    extensions: buildExtensions(slashItems),
     content,
     autofocus: true,
     onUpdate: hooks.onUpdate,
