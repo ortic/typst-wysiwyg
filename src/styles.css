@@ -107,6 +107,16 @@ select, input[type=text], input[type=number], textarea {
 .page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
 .page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
 
+/* page break */
+.doc-pagebreak {
+  position: relative; height: 0; margin: 20px 0; border-top: 2px dashed #c2c7d0;
+}
+.doc-pagebreak::after {
+  content: 'Page break'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #fff; padding: 0 10px; color: #9aa0ab; font: 11px/1 system-ui; text-transform: uppercase; letter-spacing: .06em;
+}
+.doc-pagebreak.ProseMirror-selectednode { border-top-color: #7c3aed; }
+
 /* block equation */
 .math-block { margin: 0 0 .9em; border: 1px solid #e7e9ef; border-radius: 6px; overflow: hidden; }
 .math-block.selected { border-color: #a8aef2; box-shadow: 0 0 0 1px #a8aef2; }

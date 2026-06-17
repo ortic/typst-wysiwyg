@@ -185,6 +185,7 @@ function rbtn(icon: string, label: string, onClick: () => void, active = false):
 const LINK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';
 const TABLE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>';
 const IMAGE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>';
+const PAGEBREAK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h7l5 5v3"/><path d="M13 3v5h5"/><path d="M6 21h7l5-5"/><path d="M3 14h18" stroke-dasharray="2 2"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -253,6 +254,7 @@ function ribbonGroups(): Node[] {
           rbtn(TABLE_ICON, 'Table', () => cmd((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))),
           rbtn(IMAGE_ICON, 'Image', pickImage),
           rbtn('√x', 'Equation', () => cmd((c) => c.insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }))),
+          rbtn(PAGEBREAK_ICON, 'Page break', () => cmd((c) => c.insertContent({ type: 'pageBreak' }))),
         ),
         group('Logic',
           rbtn('ƒ', 'Definitions', openDefinitionsModal),

@@ -106,6 +106,8 @@ function serializeBlock(node: PMNode): string {
     }
     case 'mathBlock':
       return `$ ${(node.attrs.src as string) || ''} $`;
+    case 'pageBreak':
+      return '#pagebreak()';
     default:
       return inline(node);
   }

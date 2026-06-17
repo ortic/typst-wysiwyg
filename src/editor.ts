@@ -91,6 +91,19 @@ export const MathBlock = Node.create({
   },
 });
 
+export const PageBreak = Node.create({
+  name: 'pageBreak',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  parseHTML() {
+    return [{ tag: 'div[data-pagebreak]' }];
+  },
+  renderHTML() {
+    return ['div', { 'data-pagebreak': '', class: 'doc-pagebreak' }];
+  },
+});
+
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
@@ -124,6 +137,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       TableCell,
       TypstImage.configure({ allowBase64: true }),
       MathBlock,
+      PageBreak,
       Placeholder.configure({
         // Only the top-level empty block gets a hint — not every empty cell.
         includeChildren: false,
