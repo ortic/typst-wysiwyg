@@ -78,29 +78,14 @@ select, input[type=text], input[type=number], textarea {
 .page {
   position: relative;
   background: #fff; box-shadow: 0 1px 10px rgba(0,0,0,.12);
-  width: 660px; min-height: var(--page-h, 933px); flex: none; align-self: flex-start;
+  width: 660px; min-height: 900px; flex: none; align-self: flex-start;
   padding: 64px 76px;
   font-family: "Latin Modern Roman", "New Computer Modern", Georgia, "Times New Roman", serif;
   font-size: 17px; line-height: 1.55; color: #111;
 }
 
-/* page-break guides: gray gutters every sheet-height, drawn under the content */
-.page-breaks {
-  position: absolute; inset: 0; pointer-events: none; z-index: 1;
-  --page-gap: 22px;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent calc(var(--page-h, 933px) - var(--page-gap)),
-    rgba(0, 0, 0, .10) calc(var(--page-h, 933px) - var(--page-gap)),
-    #e9ebef calc(var(--page-h, 933px) - var(--page-gap) + 1px),
-    #e9ebef calc(var(--page-h, 933px) - 1px),
-    rgba(0, 0, 0, .10) var(--page-h, 933px)
-  );
-}
-
-/* ProseMirror editing surface inside the page (above the page-break guides) */
-.page .ProseMirror { outline: none; min-height: 760px; position: relative; z-index: 2; }
+/* ProseMirror editing surface inside the page */
+.page .ProseMirror { outline: none; min-height: 760px; }
 .ProseMirror p.is-editor-empty:first-child::before,
 .ProseMirror .is-empty::before {
   content: attr(data-placeholder); color: #c2c7d0; float: left; height: 0; pointer-events: none;
