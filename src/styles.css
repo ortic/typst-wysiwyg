@@ -82,25 +82,26 @@ select, input[type=text], input[type=number], textarea {
   padding: 64px 76px;
   font-family: "Latin Modern Roman", "New Computer Modern", Georgia, "Times New Roman", serif;
   font-size: 17px; line-height: 1.55; color: #111;
-  /* draw the page sheets (white) separated by gray gutters; content is paginated
-     (see pagination.ts) so blocks never cross a gutter. */
-  background-color: #fff;
+}
+/* The sheets are drawn on a layer behind the content: white pages with
+   transparent gutters, so drop-shadow follows each individual sheet (per-page
+   shadow) and the canvas shows through the gaps. Content is paginated
+   (pagination.ts) so blocks never land in a gutter. */
+.page::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background-image: repeating-linear-gradient(
     to bottom,
     #fff 0,
-    #fff calc(var(--page-h) - 1px),
-    rgba(0, 0, 0, .12) calc(var(--page-h) - 1px),
-    #e9ebef var(--page-h),
-    #e9ebef calc(var(--page-h) + var(--page-gutter) - 1px),
-    rgba(0, 0, 0, .08) calc(var(--page-h) + var(--page-gutter) - 1px),
-    #fff calc(var(--page-h) + var(--page-gutter))
+    #fff var(--page-h),
+    transparent var(--page-h),
+    transparent calc(var(--page-h) + var(--page-gutter))
   );
-  filter: drop-shadow(0 1px 10px rgba(0, 0, 0, .12));
+  filter: drop-shadow(0 2px 7px rgba(0, 0, 0, .16));
 }
 .pm-page-spacer { display: block; width: 100%; user-select: none; pointer-events: none; }
 
-/* ProseMirror editing surface inside the page */
-.page .ProseMirror { outline: none; min-height: 760px; }
+/* ProseMirror editing surface inside the page (above the sheet layer) */
+.page .ProseMirror { outline: none; min-height: 760px; position: relative; z-index: 1; }
 .ProseMirror p.is-editor-empty:first-child::before,
 .ProseMirror .is-empty::before {
   content: attr(data-placeholder); color: #c2c7d0; float: left; height: 0; pointer-events: none;
