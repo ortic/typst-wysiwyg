@@ -112,6 +112,14 @@ function serializeBlock(node: PMNode): string {
       return `#quote(block: true)[${childrenJoined(node, ' ')}]`;
     case 'codeBlock':
       return node.textContent; // raw Typst escape hatch — verbatim
+    case 'codeListing': {
+      const code = node.textContent;
+      const lang = ((node.attrs.language as string) || '').trim();
+      // Fence with one more backtick than the longest run inside the code.
+      const longest = Math.max(0, ...[...code.matchAll(/`+/g)].map((m) => m[0].length));
+      const fence = '`'.repeat(Math.max(3, longest + 1));
+      return `${fence}${lang && lang !== 'text' ? lang : ''}\n${code}\n${fence}`;
+    }
     case 'horizontalRule':
       return '#line(length: 100%)';
     case 'callout': {

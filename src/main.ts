@@ -33,6 +33,7 @@ const SLASH_ITEMS: SlashItem[] = [
   { title: 'Footnote', keywords: 'reference note', run: (e) => e.chain().focus().insertContent({ type: 'footnote', attrs: { content: '' } }).run() },
   { title: 'Columns', keywords: 'multi-column section', run: (e) => e.chain().focus().insertContent({ type: 'columns', attrs: { count: 2 }, content: [{ type: 'paragraph' }] }).run() },
   { title: 'Page break', keywords: 'pagebreak', run: (e) => e.chain().focus().insertContent({ type: 'pageBreak' }).run() },
+  { title: 'Code listing', keywords: 'source code snippet program syntax', run: () => insertCodeListing() },
   { title: 'Raw Typst', hint: '</>', keywords: 'code escape', run: (e) => e.chain().focus().toggleCodeBlock().run() },
 ];
 
@@ -345,6 +346,17 @@ const COLUMNS_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none
 const LABEL_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v5l9 9 7-7-9-9H3z"/><circle cx="7" cy="11" r="1.3" fill="currentColor" stroke="none"/></svg>';
 
 /** Attach a Typst label to the current heading (referenced by @label). */
+/** Insert a syntax-highlighted code listing, prompting for the language. */
+function insertCodeListing(): void {
+  const lang = (window.prompt('Language for the code listing (e.g. python, rust, js):', 'python') ?? '').trim().toLowerCase() || 'text';
+  editor.chain().focus().insertContent({
+    type: 'codeListing',
+    attrs: { language: lang },
+    content: [{ type: 'text', text: 'code here' }],
+  }).run();
+  schedulePreview();
+}
+
 function setHeadingLabel(): void {
   if (!editor.isActive('heading')) { alert('Place the cursor in a heading first, then add a label.'); return; }
   const current = (editor.getAttributes('heading').label as string) || '';
@@ -484,6 +496,7 @@ function ribbonGroups(): Node[] {
           rbtn('•', 'Bullets', () => cmd((c) => c.toggleBulletList())),
           rbtn('1.', 'Numbered', () => cmd((c) => c.toggleOrderedList())),
           rbtn('❝', 'Callout', () => cmd((c) => c.insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }))),
+          rbtn('{ }', 'Code listing', insertCodeListing),
           rbtn('</>', 'Raw Typst', () => cmd((c) => c.insertContent({ type: 'codeBlock', content: [{ type: 'text', text: '#lorem(20)' }] }))),
         ),
         group('Insert',

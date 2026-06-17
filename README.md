@@ -157,15 +157,16 @@ relative (`./`) for the Tauri bundle (`--mode tauri`), and `/` for `npm run dev`
 ## Roadmap / next steps
 
 Most of the editor is in place (see Features), including **multi-column layout**,
-**function-style `#show` rules**, and a `.typ` importer that structures tables, lists,
-callouts, `#let`/`#show` and inline functions. What's left:
+**function-style `#show` rules**, **labels + cross-references** (`<label>` / `@ref`
+with automatic heading numbering), a **code listing** block (syntax-highlighted
+`` ``` `` raw blocks), **user templates**, and a `.typ` importer that structures
+tables, lists, callouts, `#let`/`#show`, code listings and inline functions. What's
+left:
 
-- **References & citations** — labels + cross-references (`<label>` / `@ref`), and
-  `#cite` / `#bibliography`.
+- **Citations** — `#cite` / `#bibliography` (needs a `.bib` source alongside the doc).
 - **Figures on import** — external `#image`/`#figure` come in as raw blocks (the image
-  bytes aren't in a plain `.typ`); a dedicated display **code listing** block.
-- **User templates** (save the current document as a template) and **per-section page
-  setups**.
+  bytes aren't in a plain `.typ`).
+- **Per-section page setups** (different paper/margins mid-document).
 - **Engineering**: golden round-trip serializer tests, map compile errors back to the
   offending block, and compile in a web worker for large documents.
 - **Explicitly deferred**: real-time collaboration (single-user, local-first for now).

@@ -151,6 +151,11 @@ select, input[type=text], input[type=number], textarea {
 .page pre { margin: 0 0 .9em; padding: 10px 12px; border-radius: 4px; background: #1e2330; color: #d7dce6;
   font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
 .page pre code { font: inherit; color: inherit; }
+/* code listing: lighter than the raw-Typst block, with a language tag */
+.page pre.doc-listing { position: relative; background: #f6f8fa; color: #24292f; border: 1px solid #d8dee4; }
+.page pre.doc-listing::before { content: attr(data-lang); position: absolute; top: 0; right: 0;
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: #8a93a0;
+  background: #eaeef2; padding: 1px 6px; border-bottom-left-radius: 4px; }
 .page code { background: #eef0f4; border-radius: 3px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: .9em; }
 .page img { max-width: 100%; height: auto; display: block; border-radius: 2px; }
 .page img[data-border="true"] { border: 1px solid #888; padding: 2px; }

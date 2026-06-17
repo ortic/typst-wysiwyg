@@ -236,6 +236,24 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
 
     if (t === '#pagebreak()') { blocks.push({ type: 'pageBreak' }); i++; continue; }
 
+    // Fenced code listing: ```lang … ``` (3+ backticks, matching close).
+    const fence = lines[i].match(/^(`{3,})([A-Za-z0-9_-]*)\s*$/);
+    if (fence) {
+      const ticks = fence[1];
+      const lang = fence[2] || 'text';
+      const body: string[] = [];
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() !== ticks) { body.push(lines[j]); j++; }
+      const code = body.join('\n');
+      blocks.push({
+        type: 'codeListing',
+        attrs: { language: lang },
+        content: code ? [{ type: 'text', text: code }] : [],
+      });
+      i = j < lines.length ? j + 1 : j;
+      continue;
+    }
+
     if (t.startsWith('#callout[')) {
       const { inner, next } = readBalancedLines(lines, i, '[', ']');
       const dedented = inner.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n');

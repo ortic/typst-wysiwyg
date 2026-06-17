@@ -230,6 +230,34 @@ export const Columns = Node.create({
   },
 });
 
+// Source code shown verbatim as a Typst raw listing (```lang … ```), distinct
+// from the raw-Typst escape hatch (codeBlock). Editable plain text with a
+// language tag that drives Typst's syntax highlighting in the output.
+export const CodeListing = Node.create({
+  name: 'codeListing',
+  group: 'block',
+  content: 'text*',
+  marks: '',
+  code: true,
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return {
+      language: {
+        default: 'text',
+        parseHTML: (el) => el.getAttribute('data-lang') || 'text',
+        renderHTML: (attrs) => ({ 'data-lang': attrs.language }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'pre[data-listing]', preserveWhitespace: 'full' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['pre', mergeAttributes(HTMLAttributes, { 'data-listing': '', class: 'doc-listing' }), ['code', {}, 0]];
+  },
+});
+
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
@@ -275,12 +303,14 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       PageBreak,
       Footnote,
       Columns,
+      CodeListing,
       Placeholder.configure({
         // Only the top-level empty block gets a hint — not every empty cell.
         includeChildren: false,
         placeholder: ({ node }) => {
           if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
           if (node.type.name === 'codeBlock') return 'Raw Typst…';
+          if (node.type.name === 'codeListing') return 'Code listing…';
           return 'Type here, or use the ribbon…';
         },
       }),
