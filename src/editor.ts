@@ -167,6 +167,29 @@ export const PageBreak = Node.create({
   },
 });
 
+export const Columns = Node.create({
+  name: 'columns',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return {
+      count: {
+        default: 2,
+        parseHTML: (el) => parseInt(el.getAttribute('data-columns') || '2', 10),
+        renderHTML: (attrs) => ({ 'data-columns': String(attrs.count) }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-columns]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { class: 'doc-columns' }), 0];
+  },
+});
+
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
@@ -208,6 +231,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       MathInline,
       PageBreak,
       Footnote,
+      Columns,
       Placeholder.configure({
         // Only the top-level empty block gets a hint — not every empty cell.
         includeChildren: false,

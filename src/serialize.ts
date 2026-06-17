@@ -115,6 +115,10 @@ function serializeBlock(node: PMNode): string {
       const inner = childrenBlocks(node).join('\n\n');
       return `#callout[\n${indentLines(inner, '  ')}\n]`;
     }
+    case 'columns': {
+      const inner = childrenBlocks(node).join('\n\n');
+      return `#columns(${(node.attrs.count as number) ?? 2})[\n${indentLines(inner, '  ')}\n]`;
+    }
     case 'table':
       return serializeTable(node);
     case 'image': {

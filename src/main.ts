@@ -30,6 +30,7 @@ const SLASH_ITEMS: SlashItem[] = [
   { title: 'Equation', keywords: 'math block', run: (e) => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }).run() },
   { title: 'Inline math', keywords: 'math', run: (e) => e.chain().focus().insertContent({ type: 'mathInline', attrs: { src: 'x^2' } }).run() },
   { title: 'Footnote', keywords: 'reference note', run: (e) => e.chain().focus().insertContent({ type: 'footnote', attrs: { content: '' } }).run() },
+  { title: 'Columns', keywords: 'multi-column section', run: (e) => e.chain().focus().insertContent({ type: 'columns', attrs: { count: 2 }, content: [{ type: 'paragraph' }] }).run() },
   { title: 'Page break', keywords: 'pagebreak', run: (e) => e.chain().focus().insertContent({ type: 'pageBreak' }).run() },
   { title: 'Raw Typst', hint: '</>', keywords: 'code escape', run: (e) => e.chain().focus().toggleCodeBlock().run() },
 ];
@@ -40,7 +41,7 @@ const SLASH_ITEMS: SlashItem[] = [
 const initial = TEMPLATES.find((t) => t.id === 'report')!.make();
 let logic: DocLogic = initial.logic;
 let previewVisible = false;
-type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table';
+type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns';
 let activeTab: TabId = 'home';
 let editor!: Editor;
 
@@ -254,6 +255,7 @@ function visibleTabs(): { id: TabId; label: string; ctx?: boolean }[] {
   ];
   if (editor?.isActive('image')) tabs.push({ id: 'image', label: 'Image', ctx: true });
   if (editor?.isActive('table')) tabs.push({ id: 'table', label: 'Table', ctx: true });
+  if (editor?.isActive('columns')) tabs.push({ id: 'columns', label: 'Columns', ctx: true });
   return tabs;
 }
 
@@ -264,6 +266,7 @@ function syncContextualTabs(): void {
   if (onImage && activeTab !== 'image') activeTab = 'image'; // selecting an image jumps to its tab
   else if (!onImage && activeTab === 'image') activeTab = 'home';
   if (!inTable && activeTab === 'table') activeTab = 'home';
+  if (!editor.isActive('columns') && activeTab === 'columns') activeTab = 'home';
   renderRibbon();
 }
 
@@ -307,6 +310,7 @@ const PAGEBREAK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="no
 const OPEN_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const SAVE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3M8 14h8"/></svg>';
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
+const COLUMNS_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -411,6 +415,7 @@ function ribbonGroups(): Node[] {
           rbtn('√x', 'Equation', () => cmd((c) => c.insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }))),
           rbtn('x²', 'Inline math', () => cmd((c) => c.insertContent({ type: 'mathInline', attrs: { src: 'x^2' } }))),
           rbtn(PAGEBREAK_ICON, 'Page break', () => cmd((c) => c.insertContent({ type: 'pageBreak' }))),
+          rbtn(COLUMNS_ICON, 'Columns', () => cmd((c) => c.insertContent({ type: 'columns', attrs: { count: 2 }, content: [{ type: 'paragraph' }] }))),
         ),
         group('References',
           rbtn('†', 'Footnote', () => cmd((c) => c.insertContent({ type: 'footnote', attrs: { content: '' } }))),
@@ -474,7 +479,41 @@ function ribbonGroups(): Node[] {
         ),
       ];
     }
+    case 'columns': {
+      const count = (editor.getAttributes('columns').count as number) ?? 2;
+      const countBtn = (n: number) => rbtn(String(n), `${n} cols`, () => updateColumns(n), count === n);
+      return [
+        group('Columns', countBtn(2), countBtn(3), countBtn(4)),
+        group('Section', rbtn('✕', 'Remove', removeColumns)),
+      ];
+    }
   }
+}
+
+/** Set the column count of the current columns section. */
+function updateColumns(n: number): void {
+  editor.chain().focus().updateAttributes('columns', { count: n }).run();
+  renderRibbon();
+  schedulePreview();
+}
+
+/** Unwrap the current columns section, keeping its content in the document. */
+function removeColumns(): void {
+  editor.commands.command(({ state, tr, dispatch }) => {
+    const { $from } = state.selection;
+    for (let d = $from.depth; d > 0; d--) {
+      if ($from.node(d).type.name === 'columns') {
+        const node = $from.node(d);
+        const start = $from.before(d);
+        if (dispatch) tr.replaceWith(start, start + node.nodeSize, node.content);
+        return true;
+      }
+    }
+    return false;
+  });
+  editor.commands.focus();
+  renderRibbon();
+  schedulePreview();
 }
 
 /** Update attributes of the currently selected image, then refresh preview. */

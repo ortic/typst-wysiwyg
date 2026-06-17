@@ -235,6 +235,15 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
       continue;
     }
 
+    const colsM = t.match(/^#columns\((\d+)\)\[/);
+    if (colsM) {
+      const { inner, next } = readBalancedLines(lines, i, '[', ']');
+      const dedented = inner.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n');
+      blocks.push({ type: 'columns', attrs: { count: parseInt(colsM[1], 10) }, content: parseContent(dedented).content });
+      i = next;
+      continue;
+    }
+
     if (t.startsWith('#table(')) {
       const { inner, next } = readBalancedLines(lines, i, '(', ')');
       const tbl = parseTableInner(inner);

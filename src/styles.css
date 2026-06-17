@@ -96,10 +96,18 @@ select, input[type=text], input[type=number], textarea {
 .page h3 { font-size: 1.18em; font-weight: 700; margin: .9em 0 .3em; line-height: 1.2; }
 .page p  { margin: 0 0 .7em; }
 .page.justify .ProseMirror p { text-align: justify; }
-.page.cols-2 .ProseMirror { column-count: 2; column-gap: 26px; }
-.page.cols-3 .ProseMirror { column-count: 3; column-gap: 20px; }
-.page.cols-2 .ProseMirror > :first-child,
-.page.cols-3 .ProseMirror > :first-child { margin-top: 0; }
+/* page-wide columns: Typst fills the first column before the next, so use
+   column-fill:auto against the page height rather than balancing. */
+.page.cols-2 .ProseMirror { column-count: 2; column-gap: 26px; column-fill: auto; height: 900px; }
+.page.cols-3 .ProseMirror { column-count: 3; column-gap: 20px; column-fill: auto; height: 900px; }
+
+/* a multi-column section block (#columns) — these balance, like Typst */
+.doc-columns { margin: 0 0 .9em; column-gap: 24px; padding: 4px 0; }
+.doc-columns[data-columns="2"] { column-count: 2; }
+.doc-columns[data-columns="3"] { column-count: 3; }
+.doc-columns[data-columns="4"] { column-count: 4; }
+.doc-columns > :first-child { margin-top: 0; }
+.doc-columns.ProseMirror-selectednode { outline: 2px solid #a8aef2; }
 .page ul, .page ol { margin: 0 0 .7em; padding-left: 1.4em; }
 .page li { margin: .1em 0; }
 .page li > p { margin: 0; }
