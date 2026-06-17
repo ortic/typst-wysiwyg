@@ -43,7 +43,7 @@ const SLASH_ITEMS: SlashItem[] = [
 const initial = TEMPLATES.find((t) => t.id === 'report')!.make();
 let logic: DocLogic = initial.logic;
 let previewVisible = false;
-type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns';
+type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code';
 let activeTab: TabId = 'home';
 let editor!: Editor;
 
@@ -335,6 +335,7 @@ function visibleTabs(): { id: TabId; label: string; ctx?: boolean }[] {
   if (editor?.isActive('image')) tabs.push({ id: 'image', label: 'Image', ctx: true });
   if (editor?.isActive('table')) tabs.push({ id: 'table', label: 'Table', ctx: true });
   if (editor?.isActive('columns')) tabs.push({ id: 'columns', label: 'Columns', ctx: true });
+  if (editor?.isActive('codeListing')) tabs.push({ id: 'code', label: 'Code', ctx: true });
   return tabs;
 }
 
@@ -342,8 +343,11 @@ function visibleTabs(): { id: TabId; label: string; ctx?: boolean }[] {
 function syncContextualTabs(): void {
   const onImage = editor.isActive('image');
   const inTable = editor.isActive('table');
+  const onCode = editor.isActive('codeListing');
   if (onImage && activeTab !== 'image') activeTab = 'image'; // selecting an image jumps to its tab
   else if (!onImage && activeTab === 'image') activeTab = 'home';
+  if (onCode && activeTab !== 'code') activeTab = 'code'; // selecting a code listing jumps to its tab
+  else if (!onCode && activeTab === 'code') activeTab = 'home';
   if (!inTable && activeTab === 'table') activeTab = 'home';
   if (!editor.isActive('columns') && activeTab === 'columns') activeTab = 'home';
   renderRibbon();
@@ -672,7 +676,49 @@ function ribbonGroups(): Node[] {
         group('Section', rbtn('✕', 'Remove', removeColumns)),
       ];
     }
+    case 'code': {
+      const lang = (editor.getAttributes('codeListing').language as string) || 'text';
+      const langBtn = (val: string, label: string) =>
+        rbtn(label, val, () => updateCodeLang(val), lang === val);
+      return [
+        group('Language', rfield('Language', codeLangInput(lang))),
+        group('Common',
+          langBtn('python', 'Py'), langBtn('javascript', 'JS'), langBtn('typescript', 'TS'),
+          langBtn('rust', 'Rs'), langBtn('typ', 'Typ'), langBtn('text', 'Txt'),
+        ),
+        group('Block', rbtn('✕', 'Delete', () => cmd((c) => c.deleteNode('codeListing')))),
+      ];
+    }
   }
+}
+
+const CODE_LANGS = [
+  'text', 'python', 'javascript', 'typescript', 'rust', 'c', 'cpp', 'java', 'go', 'ruby',
+  'php', 'html', 'css', 'json', 'yaml', 'toml', 'bash', 'sql', 'typ', 'haskell', 'swift', 'kotlin',
+];
+let codeLangDatalist: HTMLDataListElement | null = null;
+function codeLangInput(value: string): HTMLInputElement {
+  if (!codeLangDatalist) {
+    codeLangDatalist = el('datalist', { id: 'code-langs' }) as HTMLDataListElement;
+    for (const l of CODE_LANGS) codeLangDatalist.append(el('option', { value: l }));
+    document.body.appendChild(codeLangDatalist);
+  }
+  const i = el('input', { type: 'text', placeholder: 'text', list: 'code-langs' }) as HTMLInputElement;
+  i.value = value; i.style.width = '110px';
+  // Commit on change, not on every keystroke: applying the attribute dispatches
+  // a transaction that pulls focus to the editor, which would interrupt typing.
+  // `change` fires on blur, Enter, or picking a datalist option.
+  const commit = () => updateCodeLang(i.value.trim().toLowerCase() || 'text');
+  i.onchange = commit;
+  i.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } };
+  return i;
+}
+
+/** Set the language of the current code listing (from the quick-pick buttons). */
+function updateCodeLang(language: string): void {
+  editor.chain().focus().updateAttributes('codeListing', { language }).run();
+  renderRibbon();
+  schedulePreview();
 }
 
 /** Set the column count of the current columns section. */
