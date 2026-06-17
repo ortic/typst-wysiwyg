@@ -253,8 +253,11 @@ select, input[type=text], input[type=number], textarea {
 .preview.hidden { display: none; }
 .preview .pg { background: #fff; box-shadow: 0 1px 10px rgba(0,0,0,.15); align-self: flex-start; }
 .preview svg { display: block; max-width: 100%; height: auto; }
-.preview .err { background: #fff0f0; color: #92400e; border: 1px solid #f0b4b4; border-radius: 6px; padding: 12px;
-  white-space: pre-wrap; font-family: ui-monospace, monospace; align-self: flex-start; }
+.preview .err { background: #fff7f5; color: #92400e; border: 1px solid #f0b4b4; border-radius: 8px; padding: 14px 16px;
+  align-self: flex-start; max-width: 520px; font: 13px/1.5 system-ui; }
+.preview .err-title { font-weight: 700; color: #b91c1c; margin-bottom: 8px; }
+.preview .err-msg { font-family: ui-monospace, monospace; background: #fff; border: 1px solid #f0d0c8; border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; white-space: pre-wrap; }
+.preview .err-hint { color: #6b7280; font-size: 12px; margin-top: 2px; }
 .preview .loading { color: #6b7280; align-self: center; }
 
 /* ---- modals ---- */

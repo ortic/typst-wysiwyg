@@ -87,8 +87,25 @@ async function refreshPreview(): Promise<void> {
     holder.innerHTML = svg;
     previewPane.replaceChildren(holder);
   } catch (e) {
-    previewPane.replaceChildren(el('div', { class: 'err' }, `Typst compile error:\n${String(e)}`));
+    previewPane.replaceChildren(formatCompileError(e));
   }
+}
+
+/** Pull the human-readable message(s) and hints out of a Typst diagnostic. */
+function formatCompileError(e: unknown): HTMLElement {
+  const raw = String(e);
+  const messages = [...raw.matchAll(/message:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\"/g, '"'));
+  const hints = [...raw.matchAll(/hints:\s*\[([^\]]*)\]/g)]
+    .flatMap((m) => [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((h) => h[1]));
+  const box = el('div', { class: 'err' });
+  box.append(el('div', { class: 'err-title' }, 'Typst compile error'));
+  if (messages.length) {
+    for (const m of messages) box.append(el('div', { class: 'err-msg' }, m));
+  } else {
+    box.append(el('div', { class: 'err-msg' }, raw.slice(0, 400)));
+  }
+  for (const h of hints) box.append(el('div', { class: 'err-hint' }, `hint: ${h}`));
+  return box;
 }
 
 // ---------------------------------------------------------------------------
