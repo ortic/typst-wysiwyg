@@ -162,11 +162,11 @@ Most of the editor is in place (see Features), including **multi-column layout**
 BibTeX or Hayagriva YAML, cite entries inline), a **code listing** block
 (syntax-highlighted `` ``` `` raw blocks), **user templates**, and a `.typ`
 importer that structures tables, lists, callouts, `#let`/`#show`, code listings
-and inline functions. There are **golden round-trip serializer tests**
+and inline functions. It imports **figures** (`#image`/`#figure`) as real image nodes with a
+placeholder preview (a plain `.typ` carries no image bytes) that keeps the path
+and caption for re-export. There are **golden round-trip serializer tests**
 (`npm test`). What's left:
 
-- **Figures on import** — external `#image`/`#figure` come in as raw blocks (the image
-  bytes aren't in a plain `.typ`).
 - **Per-section page setups** (different paper/margins mid-document).
 - **Engineering**: compile in a web worker for large documents. (Compile errors are
   already located heuristically — the embedded compiler only emits opaque span IDs,

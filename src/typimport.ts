@@ -207,6 +207,30 @@ function rawBlock(text: string): object {
   return { type: 'codeBlock', content: text ? [{ type: 'text', text }] : [] };
 }
 
+// A plain .typ carries no image bytes, so imported images get a placeholder
+// preview (showing the file name) while keeping the real path for re-export.
+function imagePlaceholder(path: string): string {
+  const name = path.split('/').pop() || path;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">`
+    + `<rect width="100%" height="100%" fill="#eef0f4" stroke="#c9ced8"/>`
+    + `<text x="50%" y="50%" font-family="sans-serif" font-size="13" fill="#8a93a0" text-anchor="middle">⊞ ${name}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+/** Parse an #image / #figure / bordered-box block into an image node. */
+function parseImageBlock(text: string): object | null {
+  const path = text.match(/image\(\s*"((?:[^"\\]|\\.)*)"/)?.[1];
+  if (!path) return null;
+  const width = text.match(/width:\s*([\d.]+)%/);
+  const border = /box\(\s*stroke/.test(text);
+  const cap = text.match(/caption:\s*\[([\s\S]*)\]\s*\)\s*$/);
+  const alt = cap ? unescapeMarkup(cap[1].trim()) : '';
+  return {
+    type: 'image',
+    attrs: { src: imagePlaceholder(path), path, width: width ? parseFloat(width[1]) : 80, border, alt },
+  };
+}
+
 function parseContent(text: string): { type: 'doc'; content: object[] } {
   const lines = text.split('\n');
   const blocks: object[] = [];
@@ -285,6 +309,21 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
       blocks.push(tbl ?? rawBlock(lines.slice(i, next).join('\n')));
       i = next;
       continue;
+    }
+
+    // #image / #figure / bordered #box[#image …] — structure into image nodes.
+    if (/^#(?:image|figure|box)\b/.test(t) && t.includes('image(')) {
+      let j = i, combined = '', depthP = 0, depthB = 0;
+      do {
+        combined += (combined ? '\n' : '') + lines[j];
+        for (const ch of lines[j]) {
+          if (ch === '(') depthP++; else if (ch === ')') depthP--;
+          else if (ch === '[') depthB++; else if (ch === ']') depthB--;
+        }
+        j++;
+      } while (j < lines.length && (depthP > 0 || depthB > 0));
+      const node = parseImageBlock(combined);
+      if (node) { blocks.push(node); i = j; continue; }
     }
 
     if (t.startsWith('$')) {

@@ -58,6 +58,9 @@ def hello():
   pagebreak: `= One
 #pagebreak()
 = Two`,
+
+  figure: `= Pics
+#figure(image("/assets/img1.png", width: 60%), caption: [A diagram])`,
 };
 
 describe('round-trip', () => {
@@ -91,5 +94,11 @@ describe('generated Typst', () => {
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');
+  });
+
+  it('structures figures (keeps the path and caption)', () => {
+    const { typ } = cycle(SAMPLES.figure);
+    expect(typ).toContain('#figure(image("/assets/img1.png", width: 60%)');
+    expect(typ).toContain('caption: [A diagram]');
   });
 });
