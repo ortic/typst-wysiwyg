@@ -59,6 +59,9 @@ an icon.
 - **Equations** — a block equation with a live-rendered (Typst-compiled) preview above an
   editable source field; serializes to `$ … $`.
 - **Block handle** (⠿) for changing block type, moving, inserting and deleting.
+- **Context-sensitive ribbon tabs** (Word-style): selecting an image shows an **Image**
+  tab (width, border); working in a table shows a **Table** tab (rows/columns, header,
+  striped, borders).
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
 - **Live Typst preview** (compiled in the browser via WASM), hidden by default and

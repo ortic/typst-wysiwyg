@@ -30,6 +30,38 @@ const TypstImage = Image.extend({
         parseHTML: (el) => el.getAttribute('data-path'),
         renderHTML: (attrs) => (attrs.path ? { 'data-path': attrs.path } : {}),
       },
+      width: {
+        default: 80, // percent of the text width
+        parseHTML: (el) => {
+          const m = (el.style.width || '').match(/([\d.]+)%/);
+          return m ? parseFloat(m[1]) : 80;
+        },
+        renderHTML: (attrs) => ({ style: `width: ${attrs.width}%` }),
+      },
+      border: {
+        default: false,
+        parseHTML: (el) => el.getAttribute('data-border') === 'true',
+        renderHTML: (attrs) => (attrs.border ? { 'data-border': 'true' } : {}),
+      },
+    };
+  },
+});
+
+// Table carries style attributes the contextual "Table" tab edits.
+const StyledTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      striped: {
+        default: false,
+        parseHTML: (el) => el.getAttribute('data-striped') === 'true',
+        renderHTML: (attrs) => (attrs.striped ? { 'data-striped': 'true' } : {}),
+      },
+      borders: {
+        default: 'all', // 'all' | 'horizontal' | 'none'
+        parseHTML: (el) => el.getAttribute('data-borders') || 'all',
+        renderHTML: (attrs) => ({ 'data-borders': attrs.borders }),
+      },
     };
   },
 });
@@ -86,7 +118,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
         // codeBlock is kept and reused as the raw-Typst block.
       }),
       Link.configure({ openOnClick: false, autolink: true }),
-      Table.configure({ resizable: true }),
+      StyledTable.configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,

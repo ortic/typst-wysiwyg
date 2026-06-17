@@ -32,6 +32,10 @@ select, input[type=text], input[type=number], textarea {
 }
 .tab:hover { background: #e6e8ee; }
 .tab.active { background: #fff; color: #1e2330; font-weight: 600; box-shadow: 0 -1px 0 #d0d4dc inset; }
+/* contextual tabs (Image / Table) get an accent so they read as situational */
+.tab.tab-ctx { color: #6d28d9; }
+.tab.tab-ctx::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #7c3aed; margin-right: 6px; vertical-align: middle; }
+.tab.tab-ctx.active { color: #5b21b6; box-shadow: 0 -2px 0 #7c3aed inset; }
 
 .ribbon-body {
   display: flex; align-items: stretch; gap: 0; background: #fff;
@@ -94,8 +98,14 @@ select, input[type=text], input[type=number], textarea {
   font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
 .page pre code { font: inherit; color: inherit; }
 .page code { background: #eef0f4; border-radius: 3px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: .9em; }
-.page img { max-width: 80%; height: auto; display: block; margin: 0 0 .9em; border-radius: 2px; }
+.page img { max-width: 100%; height: auto; display: block; margin: 0 0 .9em; border-radius: 2px; }
+.page img[data-border="true"] { border: 1px solid #888; padding: 2px; }
 .page img.ProseMirror-selectednode { outline: 2px solid #a8aef2; }
+
+/* table style options reflected in the editor */
+.page table[data-striped="true"] tr:nth-child(odd) td { background: #f8f9fb; }
+.page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
+.page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
 
 /* block equation */
 .math-block { margin: 0 0 .9em; border: 1px solid #e7e9ef; border-radius: 6px; overflow: hidden; }

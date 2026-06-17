@@ -98,8 +98,11 @@ function serializeBlock(node: PMNode): string {
       const path = (node.attrs.path as string) || (node.attrs.src as string) || '';
       if (!path || path.startsWith('data:')) return ''; // need a real VFS path
       const alt = (node.attrs.alt as string) || '';
-      const img = `image(${quote(path)}, width: 80%)`;
-      return alt ? `#figure(${img}, caption: [${escapeMarkup(alt)}])` : `#${img}`;
+      const width = (node.attrs.width as number) ?? 80;
+      const border = node.attrs.border as boolean;
+      let core = `image(${quote(path)}, width: ${width}%)`;
+      if (border) core = `box(stroke: 0.75pt + rgb("#888888"), inset: 0pt)[#${core}]`;
+      return alt ? `#figure(${core}, caption: [${escapeMarkup(alt)}])` : `#${core}`;
     }
     case 'mathBlock':
       return `$ ${(node.attrs.src as string) || ''} $`;
@@ -149,22 +152,41 @@ function isHeaderRow(row: PMNode): boolean {
   return all;
 }
 
+/** Build the Typst `fill:` closure for the header row and/or zebra striping. */
+function tableFill(header: boolean, striped: boolean): string | null {
+  const header0 = header ? 'rgb("#f3f4f7")' : null;
+  const even = striped ? 'rgb("#f8f9fb")' : null;
+  if (!header0 && !even) return null;
+  const clauses: string[] = [];
+  if (header0) clauses.push(`if row == 0 { ${header0} }`);
+  if (even) clauses.push(`${clauses.length ? 'else ' : ''}if calc.even(row) { ${even} }`);
+  return `(col, row) => ${clauses.join(' ')}`;
+}
+
 function serializeTable(node: PMNode): string {
   const rows: PMNode[] = [];
   node.forEach((r) => rows.push(r));
   if (!rows.length) return '#table()';
 
   const headerFirst = isHeaderRow(rows[0]);
+  const striped = node.attrs.striped as boolean;
+  const borders = (node.attrs.borders as string) || 'all';
 
-  // Styling chosen to match the editor: light-gray borders, the same cell
-  // padding, and a gray fill behind a bold header row.
+  const stroke =
+    borders === 'none' ? 'none'
+    : borders === 'horizontal' ? '(x: none, y: 0.5pt + rgb("#cdd2dc"))'
+    : '0.5pt + rgb("#cdd2dc")';
+
+  // Styling chosen to match the editor: borders, the same cell padding, a gray
+  // fill behind a bold header row, and optional zebra striping.
   const lines: string[] = [
     `#table(`,
     `  columns: ${tableColumns(rows[0])},`,
-    `  stroke: 0.5pt + rgb("#cdd2dc"),`,
+    `  stroke: ${stroke},`,
     `  inset: (x: 8pt, y: 5pt),`,
   ];
-  if (headerFirst) lines.push(`  fill: (col, row) => if row == 0 { rgb("#f3f4f7") },`);
+  const fill = tableFill(headerFirst, striped);
+  if (fill) lines.push(`  fill: ${fill},`);
 
   rows.forEach((row, ri) => {
     const header = isHeaderRow(row);

@@ -16,7 +16,8 @@ import { addAsset } from './assets';
 const initial = TEMPLATES.find((t) => t.id === 'report')!.make();
 let logic: DocLogic = initial.logic;
 let previewVisible = false;
-let activeTab: 'home' | 'layout' | 'insert' | 'view' = 'home';
+type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table';
+let activeTab: TabId = 'home';
 let editor!: Editor;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -67,10 +68,9 @@ const pageEl = el('div', { class: 'page' });
 canvasWrap.append(pageEl);
 
 function mountEditor(content: object): void {
-  const refreshContextual = () => { if (activeTab === 'home' || activeTab === 'insert') renderRibbon(); };
   editor = createEditor(pageEl, content as never, {
-    onUpdate: () => { schedulePreview(); refreshContextual(); },
-    onSelection: refreshContextual,
+    onUpdate: () => { schedulePreview(); syncContextualTabs(); },
+    onSelection: syncContextualTabs,
   });
   installBlockHandle(editor, pageEl);
   syncJustify();
@@ -125,32 +125,48 @@ function pickImage(): void {
 // Ribbon
 // ---------------------------------------------------------------------------
 const ribbonBody = el('div', { class: 'ribbon-body' });
+const tabStrip = el('div', { class: 'tabstrip' });
 
 function ribbon(): HTMLElement {
   const bar = el('div', { class: 'ribbon' });
-  const tabs = el('div', { class: 'tabstrip' });
-  const tabDefs: [typeof activeTab, string][] = [
-    ['home', 'Home'], ['layout', 'Layout'], ['insert', 'Insert'], ['view', 'View'],
-  ];
-  for (const [id, label] of tabDefs) {
-    const t = el('button', { class: 'tab' + (activeTab === id ? ' active' : '') }, label);
-    t.onclick = () => { activeTab = id; renderRibbon(); };
-    tabs.append(t);
-  }
-  // Brand sits on the right of the tab row — no separate title bar.
-  tabs.append(
-    el('span', { class: 'tab-spacer' }),
-    el('span', { class: 'brand' }, el('span', { class: 'app' }, 'Typst WYSIWYG'), el('span', { class: 'muted' }, 'spike')),
-  );
-  bar.append(tabs, ribbonBody);
+  bar.append(tabStrip, ribbonBody);
   return bar;
 }
 
+/** The tabs to show — base tabs plus contextual ones for the current selection. */
+function visibleTabs(): { id: TabId; label: string; ctx?: boolean }[] {
+  const tabs: { id: TabId; label: string; ctx?: boolean }[] = [
+    { id: 'home', label: 'Home' }, { id: 'layout', label: 'Layout' },
+    { id: 'insert', label: 'Insert' }, { id: 'view', label: 'View' },
+  ];
+  if (editor?.isActive('image')) tabs.push({ id: 'image', label: 'Image', ctx: true });
+  if (editor?.isActive('table')) tabs.push({ id: 'table', label: 'Table', ctx: true });
+  return tabs;
+}
+
+/** Show/auto-activate contextual tabs as the selection changes. */
+function syncContextualTabs(): void {
+  const onImage = editor.isActive('image');
+  const inTable = editor.isActive('table');
+  if (onImage && activeTab !== 'image') activeTab = 'image'; // selecting an image jumps to its tab
+  else if (!onImage && activeTab === 'image') activeTab = 'home';
+  if (!inTable && activeTab === 'table') activeTab = 'home';
+  renderRibbon();
+}
+
 function renderRibbon(): void {
-  document.querySelectorAll<HTMLButtonElement>('.tabstrip .tab').forEach((b, i) => {
-    const ids: (typeof activeTab)[] = ['home', 'layout', 'insert', 'view'];
-    b.classList.toggle('active', ids[i] === activeTab);
-  });
+  const tabs = visibleTabs();
+  if (!tabs.some((t) => t.id === activeTab)) activeTab = 'home';
+  tabStrip.replaceChildren();
+  for (const t of tabs) {
+    const btn = el('button', { class: 'tab' + (activeTab === t.id ? ' active' : '') + (t.ctx ? ' tab-ctx' : '') }, t.label);
+    btn.onclick = () => { activeTab = t.id; renderRibbon(); };
+    tabStrip.append(btn);
+  }
+  tabStrip.append(
+    el('span', { class: 'tab-spacer' }),
+    el('span', { class: 'brand' }, el('span', { class: 'app' }, 'Typst WYSIWYG'), el('span', { class: 'muted' }, 'spike')),
+  );
   ribbonBody.replaceChildren(...ribbonGroups());
 }
 
@@ -223,8 +239,8 @@ function ribbonGroups(): Node[] {
         group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
       ];
     }
-    case 'insert': {
-      const groups: Node[] = [
+    case 'insert':
+      return [
         group('Blocks',
           rbtn('H', 'Heading', () => cmd((c) => c.insertContent({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Heading' }] }))),
           rbtn('¶', 'Text', () => cmd((c) => c.insertContent('<p></p>'))),
@@ -238,28 +254,76 @@ function ribbonGroups(): Node[] {
           rbtn(IMAGE_ICON, 'Image', pickImage),
           rbtn('√x', 'Equation', () => cmd((c) => c.insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }))),
         ),
+        group('Logic',
+          rbtn('ƒ', 'Definitions', openDefinitionsModal),
+          rbtn('✦', 'Show rules', openShowModal),
+        ),
       ];
-      if (editor.isActive('table')) {
-        groups.push(group('Table',
-          rbtn('▤+', 'Row', () => cmd((c) => c.addRowAfter())),
-          rbtn('▤−', 'Del row', () => cmd((c) => c.deleteRow())),
-          rbtn('▥+', 'Col', () => cmd((c) => c.addColumnAfter())),
-          rbtn('▥−', 'Del col', () => cmd((c) => c.deleteColumn())),
-          rbtn('✕', 'Delete', () => cmd((c) => c.deleteTable())),
-        ));
-      }
-      groups.push(group('Logic',
-        rbtn('ƒ', 'Definitions', openDefinitionsModal),
-        rbtn('✦', 'Show rules', openShowModal),
-      ));
-      return groups;
-    }
     case 'view':
       return [
         group('Show', rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible)),
         group('Source', rbtn('</>', 'Typst source', openSourceModal)),
       ];
+    case 'image': {
+      const at = editor.getAttributes('image');
+      const width = (at.width as number) ?? 80;
+      const widthBtn = (w: number, label: string) =>
+        rbtn(label, `${w}%`, () => updateImage({ width: w }), width === w);
+      return [
+        group('Width',
+          widthBtn(25, 'S'), widthBtn(50, 'M'), widthBtn(75, 'L'), widthBtn(100, 'Full'),
+          rbtn('−', 'Smaller', () => updateImage({ width: Math.max(10, Math.round(width) - 10) })),
+          rbtn('+', 'Larger', () => updateImage({ width: Math.min(100, Math.round(width) + 10) })),
+        ),
+        group('Style',
+          rbtn('▢', 'Border', () => updateImage({ border: !at.border }), !!at.border),
+        ),
+        group('Arrange',
+          rbtn('✕', 'Delete', () => cmd((c) => c.deleteSelection())),
+        ),
+      ];
+    }
+    case 'table': {
+      const at = editor.getAttributes('table');
+      const borders = (at.borders as string) || 'all';
+      const borderBtn = (val: string, icon: string, label: string) =>
+        rbtn(icon, label, () => updateTable({ borders: val }), borders === val);
+      return [
+        group('Rows & columns',
+          rbtn('▤+', 'Row', () => cmd((c) => c.addRowAfter())),
+          rbtn('▤−', 'Del row', () => cmd((c) => c.deleteRow())),
+          rbtn('▥+', 'Column', () => cmd((c) => c.addColumnAfter())),
+          rbtn('▥−', 'Del col', () => cmd((c) => c.deleteColumn())),
+        ),
+        group('Style',
+          rbtn('⊤', 'Header', () => cmd((c) => c.toggleHeaderRow()), editor.isActive('tableHeader')),
+          rbtn('☰', 'Striped', () => updateTable({ striped: !at.striped }), !!at.striped),
+        ),
+        group('Borders',
+          borderBtn('all', '⊞', 'All'),
+          borderBtn('horizontal', '☰', 'Rows'),
+          borderBtn('none', '▢', 'None'),
+        ),
+        group('Table',
+          rbtn('✕', 'Delete', () => cmd((c) => c.deleteTable())),
+        ),
+      ];
+    }
   }
+}
+
+/** Update attributes of the currently selected image, then refresh preview. */
+function updateImage(attrs: Record<string, unknown>): void {
+  editor.chain().focus().updateAttributes('image', attrs).run();
+  renderRibbon();
+  schedulePreview();
+}
+
+/** Update attributes of the current table, then refresh preview. */
+function updateTable(attrs: Record<string, unknown>): void {
+  editor.chain().focus().updateAttributes('table', attrs).run();
+  renderRibbon();
+  schedulePreview();
 }
 
 // ---------------------------------------------------------------------------
