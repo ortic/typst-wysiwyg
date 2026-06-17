@@ -12,6 +12,7 @@ import { installBubbleMenu } from './bubble';
 import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
 import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
+import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
 
 // The "/" command menu — insert any block by typing. `pickImage` is referenced
 // before its declaration but only called at runtime, so the hoist is fine.
@@ -244,6 +245,7 @@ const IMAGE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" 
 const PAGEBREAK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h7l5 5v3"/><path d="M13 3v5h5"/><path d="M6 21h7l5-5"/><path d="M3 14h18" stroke-dasharray="2 2"/></svg>';
 const OPEN_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const SAVE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3M8 14h8"/></svg>';
+const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -330,6 +332,7 @@ function ribbonGroups(): Node[] {
     case 'view':
       return [
         group('Show', rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible)),
+        group('Find', rbtn(SEARCH_ICON, 'Find & replace', openFindBar)),
         group('Source', rbtn('</>', 'Typst source', openSourceModal)),
       ];
     case 'image': {
@@ -756,10 +759,66 @@ function openSourceModal(): void {
   openModal(modal);
 }
 
+// ---------------------------------------------------------------------------
+// Find & replace bar
+// ---------------------------------------------------------------------------
+const findBar = el('div', { class: 'find-bar' });
+let findInput!: HTMLInputElement;
+let findCount!: HTMLElement;
+let findReplace!: HTMLInputElement;
+
+function buildFindBar(): void {
+  findInput = el('input', { type: 'text', placeholder: 'Find', class: 'find-q' }) as HTMLInputElement;
+  findReplace = el('input', { type: 'text', placeholder: 'Replace', class: 'find-r' }) as HTMLInputElement;
+  findCount = el('span', { class: 'find-count' }, '');
+  const refresh = () => { const s = searchStatus(editor); findCount.textContent = s.count ? `${s.index}/${s.count}` : 'None'; };
+  findInput.oninput = () => { setSearch(editor, findInput.value); refresh(); };
+  findInput.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); searchNav(editor, e.shiftKey ? -1 : 1); refresh(); }
+    if (e.key === 'Escape') closeFindBar();
+  };
+  findReplace.onkeydown = (e) => { if (e.key === 'Escape') closeFindBar(); };
+  const btn = (label: string, title: string, fn: () => void) => {
+    const b = el('button', { class: 'find-btn', title }, label);
+    b.onclick = fn;
+    return b;
+  };
+  findBar.replaceChildren(
+    findInput, findCount,
+    btn('‹', 'Previous (Shift+Enter)', () => { searchNav(editor, -1); refresh(); }),
+    btn('›', 'Next (Enter)', () => { searchNav(editor, 1); refresh(); }),
+    findReplace,
+    btn('Replace', 'Replace current', () => { replaceCurrent(editor, findReplace.value); refresh(); }),
+    btn('All', 'Replace all', () => { replaceAll(editor, findReplace.value); refresh(); }),
+    btn('✕', 'Close (Esc)', closeFindBar),
+  );
+}
+
+function openFindBar(): void {
+  if (!findBar.isConnected) main.appendChild(findBar);
+  buildFindBar();
+  findBar.classList.add('open');
+  const sel = editor.state.selection;
+  const seed = sel.empty ? '' : editor.state.doc.textBetween(sel.from, sel.to);
+  findInput.value = seed;
+  if (seed) { setSearch(editor, seed); }
+  findInput.focus();
+  findInput.select();
+  const s = searchStatus(editor);
+  findCount.textContent = s.count ? `${s.index}/${s.count}` : 'None';
+}
+function closeFindBar(): void {
+  findBar.classList.remove('open');
+  clearSearch(editor);
+  editor.commands.focus();
+}
+
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); }
   // Ctrl/Cmd+S saves to a file instead of the browser's page save.
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToFile(); }
+  // Ctrl/Cmd+F opens find & replace.
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openFindBar(); }
 });
 
 // ---------------------------------------------------------------------------

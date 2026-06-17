@@ -22,6 +22,7 @@ import { createMathInlineView } from './mathinlineview';
 import { createFootnoteView } from './footnoteview';
 import { createImageNodeView } from './imageview';
 import { SlashMenu, type SlashItem } from './slash';
+import { Search } from './search';
 
 // Image node carries an extra `path` attribute: the Typst VFS path whose bytes
 // live in assets.ts. The `src` (a data URL) is only for display in the editor.
@@ -185,6 +186,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
   return new Editor({
     element,
     extensions: [
+      Search,
       SlashMenu.configure({ items: slashItems }),
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },

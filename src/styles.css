@@ -63,7 +63,7 @@ select, input[type=text], input[type=number], textarea {
 .rfield input, .rfield select { font-size: 13px; }
 
 /* ---- layout ---- */
-.main { display: flex; flex: 1; min-height: 0; }
+.main { display: flex; flex: 1; min-height: 0; position: relative; }
 .canvas-wrap { flex: 1; overflow: auto; padding: 28px; display: flex; justify-content: center; background: #e9ebef; }
 
 .page {
@@ -118,6 +118,20 @@ select, input[type=text], input[type=number], textarea {
 .page table[data-striped="true"] tr:nth-child(odd) td { background: #f8f9fb; }
 .page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
 .page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
+
+/* find & replace */
+.search-match { background: #fde68a; border-radius: 2px; }
+.search-current { background: #fb923c; border-radius: 2px; color: #1e2330; }
+.find-bar {
+  position: absolute; top: 8px; right: 20px; z-index: 40; display: none; gap: 6px; align-items: center;
+  background: #fff; border: 1px solid #d3d7df; border-radius: 8px; padding: 6px 8px; box-shadow: 0 4px 16px rgba(0,0,0,.16);
+}
+.find-bar.open { display: flex; }
+.find-bar input { font: inherit; padding: 4px 7px; border: 1px solid #cbd0da; border-radius: 5px; }
+.find-bar .find-q, .find-bar .find-r { width: 130px; }
+.find-count { font-size: 12px; color: #6b7280; min-width: 38px; text-align: center; }
+.find-btn { font: inherit; padding: 4px 8px; border: 1px solid #cbd0da; border-radius: 5px; background: #fff; cursor: pointer; }
+.find-btn:hover { background: #f0f1f4; }
 
 /* selection bubble toolbar */
 .bubble-menu {
