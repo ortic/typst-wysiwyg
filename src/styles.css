@@ -33,7 +33,14 @@ select, input[type=text], input[type=number], textarea {
   color: #4b5563; font-size: 13px; cursor: pointer;
 }
 .tab:hover { background: #e6e8ee; }
-.tab.active { background: #fff; color: #1e2330; font-weight: 600; box-shadow: 0 -1px 0 #d0d4dc inset; }
+.tab.active {
+  background: #fff; color: #1e2330; font-weight: 600;
+  bottom: -1px;
+  position: relative;
+  border-top: 1px solid #d0d4dc;
+  border-left: 1px solid #d0d4dc;
+  border-right: 1px solid #d0d4dc;
+}
 /* contextual tabs (Image / Table) get an accent so they read as situational */
 .tab.tab-ctx { color: #6d28d9; }
 .tab.tab-ctx::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #7c3aed; margin-right: 6px; vertical-align: middle; }
