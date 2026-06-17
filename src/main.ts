@@ -153,7 +153,7 @@ function mountEditor(content: object): void {
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
   installImageDropPaste(pageEl);
-  syncJustify(); syncColumns(); syncPageGeometry();
+  syncJustify(); syncColumns(); syncPageMetrics();
 }
 
 function syncJustify(): void {
@@ -167,13 +167,29 @@ function syncColumns(): void {
   else if (n >= 3) pageEl.classList.add('cols-3');
 }
 
-// Sheet height for the editor pages + page-break geometry, tracking the paper.
-const PAPER_RATIO: Record<string, number> = { a4: 297 / 210, 'us-letter': 11 / 8.5, a5: 210 / 148 };
-function syncPageGeometry(): void {
-  const r = PAPER_RATIO[logic.style.page.paper] ?? 297 / 210;
-  pageConfig.pageH = Math.round(660 * r);
-  pageEl.style.setProperty('--page-h', `${pageConfig.pageH}px`);
+// Render the editor sheet as a faithful scaled copy of the Typst page so line
+// breaks match: the A4/Letter/A5 sheet is shown at SHEET_W px wide and the font
+// size, margins and leading are scaled to that, derived from the document.
+const SHEET_W = 660;
+const MM_PX = 96 / 25.4; // CSS px per mm at 96dpi
+const PAPER_MM: Record<string, { w: number; h: number }> = {
+  a4: { w: 210, h: 297 },
+  'us-letter': { w: 215.9, h: 279.4 },
+  a5: { w: 148, h: 210 },
+};
+function syncPageMetrics(): void {
+  const dims = PAPER_MM[logic.style.page.paper] ?? PAPER_MM.a4;
+  const scale = SHEET_W / (dims.w * MM_PX);
+  const fontPx = logic.style.text.sizePt * (96 / 72) * scale;
+  const marginPx = logic.style.page.marginCm * 10 * MM_PX * scale;
+  const pageHpx = Math.round(SHEET_W * dims.h / dims.w);
+  pageEl.style.fontSize = `${fontPx.toFixed(2)}px`;
+  pageEl.style.padding = `${marginPx.toFixed(1)}px`;
+  pageEl.style.lineHeight = String(1 + logic.style.par.leadingEm);
+  pageEl.style.setProperty('--page-h', `${pageHpx}px`);
   pageEl.style.setProperty('--page-gutter', `${pageConfig.gutter}px`);
+  pageConfig.pageH = pageHpx;
+  pageConfig.margin = marginPx;
   if (editor) relayoutPages(editor.view);
 }
 
@@ -388,7 +404,7 @@ function ribbonGroups(): Node[] {
         if (s.page.paper === p) o.selected = true;
         paper.append(o);
       }
-      paper.onchange = () => { s.page.paper = paper.value as DocLogic['style']['page']['paper']; syncPageGeometry(); schedulePreview(); };
+      paper.onchange = () => { s.page.paper = paper.value as DocLogic['style']['page']['paper']; syncPageMetrics(); schedulePreview(); };
       const just = rbtn(s.par.justify ? '☰' : '≡', 'Justify', () => {
         s.par.justify = !s.par.justify; syncJustify(); renderRibbon(); schedulePreview();
       }, s.par.justify);
@@ -398,11 +414,11 @@ function ribbonGroups(): Node[] {
       return [
         group('Page',
           rfield('Paper', paper),
-          rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v))),
+          rfield('Margin cm', num(s.page.marginCm, (v) => { s.page.marginCm = v; syncPageMetrics(); })),
           rfield('Columns', num(s.page.columns ?? 1, (v) => { s.page.columns = Math.max(1, Math.round(v)); syncColumns(); }, 1)),
         ),
-        group('Text', rfield('Font', fontInput(s.text.font, (v) => (s.text.font = v))), rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v)))),
-        group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
+        group('Text', rfield('Font', fontInput(s.text.font, (v) => (s.text.font = v))), rfield('Size pt', num(s.text.sizePt, (v) => { s.text.sizePt = v; syncPageMetrics(); }))),
+        group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => { s.par.leadingEm = v; syncPageMetrics(); }, 0.05)), just),
         group('Header & footer',
           rfield('Header', txtInput(s.page.header ?? '', (v) => (s.page.header = v), 'optional', 130)),
           rfield('Footer', txtInput(s.page.footer ?? '', (v) => (s.page.footer = v), 'optional', 130)),
@@ -621,7 +637,7 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  syncJustify(); syncColumns(); syncPageGeometry();
+  syncJustify(); syncColumns(); syncPageMetrics();
   renderRibbon();
   schedulePreview();
 }
@@ -765,7 +781,7 @@ function openTemplateModal(): void {
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
-        syncJustify(); syncColumns(); syncPageGeometry();
+        syncJustify(); syncColumns(); syncPageMetrics();
         closeModal();
         renderRibbon();
         schedulePreview();
