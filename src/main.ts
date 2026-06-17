@@ -763,35 +763,77 @@ function openModal(node: HTMLElement): void {
   modalEl = overlay;
 }
 
+interface UserTemplate { id: string; name: string; doc: SavedDoc }
+const USER_TPL_KEY = 'typst-wysiwyg:templates';
+function loadUserTemplates(): UserTemplate[] {
+  try { return JSON.parse(localStorage.getItem(USER_TPL_KEY) || '[]') as UserTemplate[]; }
+  catch { return []; }
+}
+function saveUserTemplates(list: UserTemplate[]): void {
+  try { localStorage.setItem(USER_TPL_KEY, JSON.stringify(list)); } catch { /* quota */ }
+}
+
+const FILE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+
 function openTemplateModal(): void {
   const modal = el('div', { class: 'modal' });
   const search = el('input', { type: 'text', class: 'modal-search', placeholder: 'Search templates…' }) as HTMLInputElement;
   const grid = el('div', { class: 'tmpl-grid' });
+
+  const applyAndClose = (apply: () => void) => {
+    apply();
+    syncJustify(); syncColumns(); syncPageMetrics();
+    closeModal();
+    renderRibbon();
+    schedulePreview();
+    editor.commands.focus('start');
+  };
+
   const draw = (q: string) => {
     const needle = q.trim().toLowerCase();
     grid.replaceChildren();
-    const hits = TEMPLATES.filter((t) => !needle || (t.label + ' ' + t.description + ' ' + t.keywords).toLowerCase().includes(needle));
-    if (!hits.length) { grid.append(el('div', { class: 'muted' }, 'No templates match.')); return; }
-    for (const t of hits) {
+    const builtin = TEMPLATES.filter((t) => !needle || (t.label + ' ' + t.description + ' ' + t.keywords).toLowerCase().includes(needle));
+    for (const t of builtin) {
       const ico = el('div', { class: 'ico' });
       ico.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${TEMPLATE_ICONS[t.icon]}</svg>`;
       const card = el('div', { class: 'tmpl-card' }, ico, el('div', { class: 'name' }, t.label), el('div', { class: 'desc' }, t.description));
-      card.onclick = () => {
+      card.onclick = () => applyAndClose(() => {
         const made = t.make();
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
-        syncJustify(); syncColumns(); syncPageMetrics();
-        closeModal();
-        renderRibbon();
-        schedulePreview();
-        editor.commands.focus('start');
-      };
+      });
       grid.append(card);
     }
+    const user = loadUserTemplates().filter((t) => !needle || t.name.toLowerCase().includes(needle));
+    for (const t of user) {
+      const ico = el('div', { class: 'ico' });
+      ico.innerHTML = FILE_ICON_SVG;
+      const del = el('button', { class: 'tmpl-del', title: 'Delete template' }, '✕');
+      del.onclick = (e) => { e.stopPropagation(); saveUserTemplates(loadUserTemplates().filter((x) => x.id !== t.id)); draw(search.value); };
+      const card = el('div', { class: 'tmpl-card user' }, del, ico, el('div', { class: 'name' }, t.name), el('div', { class: 'desc' }, 'Your template'));
+      card.onclick = () => applyAndClose(() => applyDoc(t.doc));
+      grid.append(card);
+    }
+    if (!builtin.length && !user.length) grid.append(el('div', { class: 'muted' }, 'No templates match.'));
   };
+
+  const saveBtn = el('button', { class: 'primary' }, '+ Save current as template');
+  saveBtn.onclick = () => {
+    const name = window.prompt('Template name', 'My template');
+    if (!name) return;
+    const list = loadUserTemplates();
+    list.push({ id: uid('tpl'), name, doc: currentDoc() });
+    saveUserTemplates(list);
+    draw(search.value);
+  };
+
   search.oninput = () => draw(search.value);
-  modal.append(el('div', { class: 'modal-head' }, el('h3', {}, 'New from template'), search), grid);
+  modal.append(
+    el('div', { class: 'modal-head' }, el('h3', {}, 'New from template'), search),
+    grid,
+    el('div', { class: 'modal-foot' }, saveBtn),
+  );
   openModal(modal);
   draw('');
   search.focus();
