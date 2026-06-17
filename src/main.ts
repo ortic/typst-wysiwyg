@@ -151,11 +151,18 @@ function mountEditor(content: object): void {
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
   installImageDropPaste(pageEl);
-  syncJustify();
+  syncJustify(); syncColumns();
 }
 
 function syncJustify(): void {
   pageEl.classList.toggle('justify', logic.style.par.justify);
+}
+
+function syncColumns(): void {
+  const n = logic.style.page.columns ?? 1;
+  pageEl.classList.remove('cols-2', 'cols-3');
+  if (n === 2) pageEl.classList.add('cols-2');
+  else if (n >= 3) pageEl.classList.add('cols-3');
 }
 
 function cmd(run: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>): void {
@@ -374,7 +381,11 @@ function ribbonGroups(): Node[] {
         s.page.numbering = !s.page.numbering; renderRibbon(); schedulePreview();
       }, !!s.page.numbering);
       return [
-        group('Page', rfield('Paper', paper), rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v)))),
+        group('Page',
+          rfield('Paper', paper),
+          rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v))),
+          rfield('Columns', num(s.page.columns ?? 1, (v) => { s.page.columns = Math.max(1, Math.round(v)); syncColumns(); }, 1)),
+        ),
         group('Text', rfield('Font', fontInput(s.text.font, (v) => (s.text.font = v))), rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v)))),
         group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
         group('Header & footer',
@@ -560,7 +571,7 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  syncJustify();
+  syncJustify(); syncColumns();
   renderRibbon();
   schedulePreview();
 }
@@ -704,7 +715,7 @@ function openTemplateModal(): void {
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
-        syncJustify();
+        syncJustify(); syncColumns();
         closeModal();
         renderRibbon();
         schedulePreview();

@@ -11,6 +11,7 @@ export interface DocStyle {
   page: {
     paper: PageSize;
     marginCm: number;
+    columns?: number;    // 1 = single column (default)
     numbering?: boolean; // page numbers in the footer
     header?: string;     // header text (markup)
     footer?: string;     // footer text (markup)

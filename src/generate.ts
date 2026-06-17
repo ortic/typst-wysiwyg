@@ -20,6 +20,7 @@ function color(v: string): string {
 function genStyle(style: DocStyle): string {
   const lines: string[] = [];
   const pageArgs: string[] = [`paper: ${quote(PAPER[style.page.paper])}`, `margin: ${style.page.marginCm}cm`];
+  if (style.page.columns && style.page.columns > 1) pageArgs.push(`columns: ${style.page.columns}`);
   if (style.page.numbering) pageArgs.push(`numbering: "1"`);
   if (style.page.header?.trim()) pageArgs.push(`header: [${escapeMarkup(style.page.header.trim())}]`);
   if (style.page.footer?.trim()) pageArgs.push(`footer: [${escapeMarkup(style.page.footer.trim())}]`);
