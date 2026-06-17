@@ -28,8 +28,9 @@ compiles it one way to Typst:
 structured model (JSON AST)  ──▶  generated .typ  ──▶  Typst compiler (WASM)  ──▶  SVG / PDF
 ```
 
-There is deliberately **no Typst parser**: the prototype only creates new documents.
-Import of existing `.typ` is a future, tightly-scoped concern.
+Save writes a `.typ` that is real Typst source **and** carries the editable state in a
+trailing comment, so the editor's own files round-trip exactly; other `.typ` files are
+imported best-effort (see `typimport.ts`).
 
 ### Two layers
 
@@ -79,8 +80,11 @@ an icon.
 - **Find & replace** (Ctrl/Cmd+F) with highlighted matches, and an **outline / TOC** panel.
 - **Page setup**: paper, margins, font (with suggestions), size, leading, justification,
   **page numbers, header and footer**.
-- **Save / open** documents (`.typwys`, images included) and **autosave** to the browser,
-  restored on reload (Ctrl/Cmd+S to save). Native file dialogs in the desktop build.
+- **Save / open `.typ`** by default — the saved file is real Typst source that also
+  carries the editable state in a trailing comment, so your own documents round-trip
+  exactly; any other `.typ` is imported best-effort (prose structured, the rest kept as
+  raw blocks). Plus **autosave** to the browser (Ctrl/Cmd+S), and native file dialogs in
+  the desktop build.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
 - **Live Typst preview** (compiled in the browser via WASM) with friendly compile errors,
@@ -158,8 +162,8 @@ Most of the editor is in place (see Features). What's left:
   `#cite` / `#bibliography`.
 - **Multi-column layout** and a dedicated (display) **code listing** block, distinct from
   the raw-Typst escape hatch.
-- **Import of existing `.typ`** — the model is generated one-way today; import needs a
-  parser and will be tightly scoped.
+- **Richer `.typ` import** — the importer covers prose, lists and callouts and keeps the
+  rest as raw blocks; it could grow to parse tables, figures, `#let`/`#show`, etc.
 - **Full function-style `#show` rules** (`#show heading: it => …`); the structured editor
   covers common text restyling, the rest still uses the raw-Typst escape hatch.
 - **User templates** (save the current document as a template) and **per-section page

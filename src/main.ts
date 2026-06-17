@@ -13,6 +13,7 @@ import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
 import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
 import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
+import { STATE_MARKER, extractEmbeddedState, importTypst } from './typimport';
 
 // The "/" command menu — insert any block by typing. `pickImage` is referenced
 // before its declaration but only called at runtime, so the hoist is fine.
@@ -564,26 +565,47 @@ function applyDoc(data: SavedDoc): void {
   schedulePreview();
 }
 
-const DOC_FILTERS = [{ name: 'Typst WYSIWYG', extensions: ['typwys'] }, { name: 'JSON', extensions: ['json'] }];
+const DOC_FILTERS = [{ name: 'Typst', extensions: ['typ'] }, { name: 'Typst WYSIWYG', extensions: ['typwys', 'json'] }];
+
+/** A .typ file: the real Typst source plus the editable state in a comment. */
+function currentTypFile(): string {
+  const source = generate(logic, editor.state.doc);
+  const state = bytesToB64(new TextEncoder().encode(JSON.stringify(currentDoc())));
+  return `${source}\n${STATE_MARKER}${state}\n`;
+}
+
+/** Open document text: restore embedded state, else import the Typst markup. */
+function openDocText(text: string): void {
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith('{')) { applyDoc(JSON.parse(text) as SavedDoc); return; } // legacy .typwys/.json
+  const state = extractEmbeddedState(text);
+  if (state) {
+    const json = new TextDecoder().decode(b64ToBytes(state));
+    applyDoc(JSON.parse(json) as SavedDoc);
+    return;
+  }
+  const imported = importTypst(text);
+  applyDoc({ version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: {} });
+}
 
 async function saveToFile(): Promise<void> {
-  const json = JSON.stringify(currentDoc());
+  const content = currentTypFile();
   if (isDesktop()) {
-    if (await saveTextDialog('document.typwys', DOC_FILTERS, json)) flashSaved();
+    if (await saveTextDialog('document.typ', DOC_FILTERS, content)) flashSaved();
   } else {
-    download('document.typwys', new Blob([json], { type: 'application/json' }));
+    download('document.typ', new Blob([content], { type: 'text/plain' }));
     flashSaved();
   }
 }
 
-const docInput = el('input', { type: 'file', accept: '.typwys,.json,application/json' }) as HTMLInputElement;
+const docInput = el('input', { type: 'file', accept: '.typ,.typwys,.json,text/plain' }) as HTMLInputElement;
 docInput.style.display = 'none';
 document.body.appendChild(docInput);
 async function openFromFile(): Promise<void> {
   if (isDesktop()) {
     try {
       const text = await openTextDialog(DOC_FILTERS);
-      if (text != null) applyDoc(JSON.parse(text) as SavedDoc);
+      if (text != null) openDocText(text);
     } catch (e) { alert('Could not open file:\n' + String(e)); }
     return;
   }
@@ -591,7 +613,7 @@ async function openFromFile(): Promise<void> {
   docInput.onchange = async () => {
     const file = docInput.files?.[0];
     if (!file) return;
-    try { applyDoc(JSON.parse(await file.text()) as SavedDoc); }
+    try { openDocText(await file.text()); }
     catch (e) { alert('Could not open file:\n' + String(e)); }
   };
   docInput.click();
