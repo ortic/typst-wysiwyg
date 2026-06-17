@@ -162,19 +162,26 @@ Most of the editor is in place (see Features), including **multi-column layout**
 BibTeX or Hayagriva YAML, cite entries inline), a **code listing** block
 (syntax-highlighted `` ``` `` raw blocks), **user templates**, and a `.typ`
 importer that structures tables, lists, callouts, `#let`/`#show`, code listings
-and inline functions. It imports **figures** (`#image`/`#figure`) as real image nodes with a
-placeholder preview (a plain `.typ` carries no image bytes) that keeps the path
-and caption for re-export. There are **golden round-trip serializer tests**
-(`npm test`). What's left:
-
-- **Per-section page setups** (different paper/margins mid-document).
+and inline functions. It imports **figures** (`#image`/`#figure`) as real image
+nodes with a placeholder preview (a plain `.typ` carries no image bytes) that
+keeps the path and caption for re-export. There are **golden round-trip
+serializer tests** (`npm test`).
 
 Compilation runs in a **Web Worker**, so even large documents never block typing
 or scrolling. Compile errors are located heuristically — the embedded compiler
 only emits opaque span IDs, not source ranges, so a precise error→block map
 isn't possible via its snippet API; instead the offending identifier is matched
 against raw/math blocks to offer a jump.
-- **Explicitly deferred**: real-time collaboration (single-user, local-first for now).
+
+**Deliberately out of scope:**
+
+- **Per-section page setups** (different paper/margins mid-document). The WYSIWYG
+  canvas renders one physical sheet size with real, content-aware pagination;
+  mixing paper sizes or margins mid-document would either render incorrectly in
+  the editor or require a pagination rewrite, so it's deferred rather than shipped
+  half-working. Per-section *column* layouts (the common case) are supported via
+  the columns block.
+- **Real-time collaboration** — single-user, local-first for now.
 
 ## License
 
