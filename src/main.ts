@@ -109,7 +109,44 @@ function formatCompileError(e: unknown): HTMLElement {
     box.append(el('div', { class: 'err-msg' }, raw.slice(0, 400)));
   }
   for (const h of hints) box.append(el('div', { class: 'err-hint' }, `hint: ${h}`));
+
+  // The compiler only gives opaque span IDs, not source ranges, so we can't map
+  // an error to a block precisely. Heuristic: if the message names an identifier
+  // that appears in exactly one raw/math block, offer to jump there.
+  const loc = locateError(messages);
+  if (loc) {
+    const jump = el('button', { class: 'err-jump' }, `Jump to ${loc.label}`);
+    jump.onclick = () => editor.chain().focus().setTextSelection(loc.pos).scrollIntoView().run();
+    box.append(jump);
+  }
   return box;
+}
+
+/** Try to pin a compile error to a raw/math block by the identifier it names. */
+function locateError(messages: string[]): { pos: number; label: string } | null {
+  // Identifiers Typst tends to quote: `unknown variable: foo`, `unknown function: bar`.
+  const tokens = new Set<string>();
+  for (const m of messages) {
+    for (const t of m.matchAll(/(?:variable|function|name|label|key|field)[:\s]+`?([A-Za-z_][\w-]*)`?/g)) tokens.add(t[1]);
+    for (const t of m.matchAll(/`([A-Za-z_][\w.-]*)`/g)) tokens.add(t[1]);
+  }
+  if (!tokens.size) return null;
+  const CODE = new Set(['codeBlock', 'codeListing', 'mathBlock', 'mathInline']);
+  let hit: { pos: number; label: string } | null = null;
+  let count = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (!CODE.has(node.type.name)) return;
+    const text = node.type.name === 'mathBlock' || node.type.name === 'mathInline'
+      ? String(node.attrs.src ?? '') : node.textContent;
+    if ([...tokens].some((t) => text.includes(t))) {
+      count++;
+      const labelName = node.type.name === 'codeListing' ? 'code listing'
+        : node.type.name === 'codeBlock' ? 'raw Typst block' : 'equation';
+      hit = { pos: pos + 1, label: labelName };
+    }
+  });
+  // Only offer the jump when the match is unambiguous.
+  return count === 1 ? hit : null;
 }
 
 // ---------------------------------------------------------------------------

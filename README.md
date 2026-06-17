@@ -168,8 +168,10 @@ and inline functions. There are **golden round-trip serializer tests**
 - **Figures on import** — external `#image`/`#figure` come in as raw blocks (the image
   bytes aren't in a plain `.typ`).
 - **Per-section page setups** (different paper/margins mid-document).
-- **Engineering**: map compile errors back to the offending block, and compile in a
-  web worker for large documents.
+- **Engineering**: compile in a web worker for large documents. (Compile errors are
+  already located heuristically — the embedded compiler only emits opaque span IDs,
+  not source ranges, so a precise error→block map isn't possible via its snippet API;
+  instead the offending identifier is matched against raw/math blocks to offer a jump.)
 - **Explicitly deferred**: real-time collaboration (single-user, local-first for now).
 
 ## License

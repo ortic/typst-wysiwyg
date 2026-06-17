@@ -315,6 +315,8 @@ select, input[type=text], input[type=number], textarea {
 .preview .err-title { font-weight: 700; color: #b91c1c; margin-bottom: 8px; }
 .preview .err-msg { font-family: ui-monospace, monospace; background: #fff; border: 1px solid #f0d0c8; border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; white-space: pre-wrap; }
 .preview .err-hint { color: #6b7280; font-size: 12px; margin-top: 2px; }
+.preview .err-jump { margin-top: 10px; background: #b91c1c; border-color: #b91c1c; color: #fff; font-size: 12px; }
+.preview .err-jump:hover { background: #991b1b; }
 .preview .loading { color: #6b7280; align-self: center; }
 
 /* ---- modals ---- */
