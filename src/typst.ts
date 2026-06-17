@@ -21,16 +21,39 @@ async function syncAssets(): Promise<void> {
   for (const [path, bytes] of assets) await $typst.mapShadow(path, bytes);
 }
 
-export async function renderSvg(source: string): Promise<string> {
-  init();
-  await syncAssets();
-  return await $typst.svg({ mainContent: source });
+// A single WASM compiler instance is shared by the main preview and by every
+// live math field, so serialize all compile calls to avoid interleaving them.
+let queue: Promise<unknown> = Promise.resolve();
+function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queue.then(fn, fn);
+  queue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
-export async function renderPdf(source: string): Promise<Uint8Array> {
-  init();
-  await syncAssets();
-  const bytes = await $typst.pdf({ mainContent: source });
-  if (!bytes) throw new Error('PDF generation returned no data');
-  return bytes;
+export function renderSvg(source: string): Promise<string> {
+  return enqueue(async () => {
+    init();
+    await syncAssets();
+    return $typst.svg({ mainContent: source });
+  });
+}
+
+export function renderPdf(source: string): Promise<Uint8Array> {
+  return enqueue(async () => {
+    init();
+    await syncAssets();
+    const bytes = await $typst.pdf({ mainContent: source });
+    if (!bytes) throw new Error('PDF generation returned no data');
+    return bytes;
+  });
+}
+
+/** Render a tightly-cropped fragment (e.g. a single equation) to SVG. */
+export function renderFragmentSvg(body: string): Promise<string> {
+  return enqueue(async () => {
+    init();
+    await syncAssets();
+    const src = `#set page(width: auto, height: auto, margin: 3pt)\n#set text(size: 13pt)\n${body}`;
+    return $typst.svg({ mainContent: src });
+  });
 }

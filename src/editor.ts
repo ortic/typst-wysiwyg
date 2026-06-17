@@ -17,6 +17,7 @@ import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import Image from '@tiptap/extension-image';
+import { createMathNodeView } from './mathview';
 
 // Image node carries an extra `path` attribute: the Typst VFS path whose bytes
 // live in assets.ts. The `src` (a data URL) is only for display in the editor.
@@ -30,6 +31,31 @@ const TypstImage = Image.extend({
         renderHTML: (attrs) => (attrs.path ? { 'data-path': attrs.path } : {}),
       },
     };
+  },
+});
+
+export const MathBlock = Node.create({
+  name: 'mathBlock',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      src: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-src') ?? '',
+        renderHTML: (attrs) => ({ 'data-src': attrs.src }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-math]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-math': '' })];
+  },
+  addNodeView() {
+    return (props) => createMathNodeView(props as never);
   },
 });
 
@@ -65,6 +91,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       TableHeader,
       TableCell,
       TypstImage.configure({ allowBase64: true }),
+      MathBlock,
       Placeholder.configure({
         // Only the top-level empty block gets a hint — not every empty cell.
         includeChildren: false,

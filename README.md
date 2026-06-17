@@ -56,6 +56,8 @@ an icon.
   to `#table(...)`.
 - **Images** — insert a picture; it renders in the live preview too (the bytes are fed
   to the Typst compiler's virtual filesystem) and serializes to `#image(...)`.
+- **Equations** — a block equation with a live-rendered (Typst-compiled) preview above an
+  editable source field; serializes to `$ … $`.
 - **Block handle** (⠿) for changing block type, moving, inserting and deleting.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
@@ -108,8 +110,8 @@ Roughly in priority order. The first group is the most-requested missing content
 - ✅ **Images** — done (insert from file; rendered in the preview via the compiler's
   virtual filesystem; `#image(...)`). Still to add: drag-in, resizing, and a **figure**
   wrapper (caption + label) → `#figure(image("..."), caption: [...])`.
-- **Equations / math** — inline and block math editing → Typst `$ ... $`, ideally with a
-  live-rendered math field rather than raw markup.
+- ✅ **Equations** — done (block math with a live-rendered field, `$ … $`). Still to add:
+  **inline** math within a paragraph.
 - **Footnotes, references and citations** — `#footnote[...]`, labels + cross-references
   (`<label>` / `@ref`), and `#cite` / `#bibliography`.
 - **Page breaks, columns and code listings** — `#pagebreak()`, multi-column layout, and

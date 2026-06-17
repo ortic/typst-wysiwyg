@@ -101,6 +101,8 @@ function serializeBlock(node: PMNode): string {
       const img = `image(${quote(path)}, width: 80%)`;
       return alt ? `#figure(${img}, caption: [${escapeMarkup(alt)}])` : `#${img}`;
     }
+    case 'mathBlock':
+      return `$ ${(node.attrs.src as string) || ''} $`;
     default:
       return inline(node);
   }

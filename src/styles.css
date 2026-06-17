@@ -96,6 +96,18 @@ select, input[type=text], input[type=number], textarea {
 .page code { background: #eef0f4; border-radius: 3px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: .9em; }
 .page img { max-width: 80%; height: auto; display: block; margin: 0 0 .9em; border-radius: 2px; }
 .page img.ProseMirror-selectednode { outline: 2px solid #a8aef2; }
+
+/* block equation */
+.math-block { margin: 0 0 .9em; border: 1px solid #e7e9ef; border-radius: 6px; overflow: hidden; }
+.math-block.selected { border-color: #a8aef2; box-shadow: 0 0 0 1px #a8aef2; }
+.math-render { display: flex; justify-content: center; padding: 12px; background: #fff; min-height: 28px; }
+.math-render svg { max-width: 100%; height: auto; }
+.math-render.err { color: #b91c1c; font-size: 13px; font-family: system-ui; }
+.math-src { border-top: 1px solid #eef0f4; background: #fafbfd; }
+.math-src textarea {
+  width: 100%; border: none; background: none; resize: vertical; padding: 7px 10px;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: #353b49; outline: none;
+}
 .ProseMirror-selectednode { outline: 2px solid #a8aef2; }
 
 /* tables */

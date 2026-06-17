@@ -236,6 +236,7 @@ function ribbonGroups(): Node[] {
         group('Insert',
           rbtn(TABLE_ICON, 'Table', () => cmd((c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))),
           rbtn(IMAGE_ICON, 'Image', pickImage),
+          rbtn('√x', 'Equation', () => cmd((c) => c.insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }))),
         ),
       ];
       if (editor.isActive('table')) {
