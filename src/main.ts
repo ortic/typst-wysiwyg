@@ -152,8 +152,11 @@ function mountEditor(content: object): void {
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
   installImageDropPaste(pageEl);
-  syncJustify(); syncColumns();
+  if (!pageBreaksOverlay.isConnected) pageEl.appendChild(pageBreaksOverlay);
+  syncJustify(); syncColumns(); syncPageGuides();
 }
+
+const pageBreaksOverlay = el('div', { class: 'page-breaks' });
 
 function syncJustify(): void {
   pageEl.classList.toggle('justify', logic.style.par.justify);
@@ -164,6 +167,14 @@ function syncColumns(): void {
   pageEl.classList.remove('cols-2', 'cols-3');
   if (n === 2) pageEl.classList.add('cols-2');
   else if (n >= 3) pageEl.classList.add('cols-3');
+}
+
+// Page-break guides: draw a sheet-height every page so long content reads as
+// multiple pages. The height tracks the paper aspect ratio (sheet is 660px wide).
+const PAPER_RATIO: Record<string, number> = { a4: 297 / 210, 'us-letter': 11 / 8.5, a5: 210 / 148 };
+function syncPageGuides(): void {
+  const r = PAPER_RATIO[logic.style.page.paper] ?? 297 / 210;
+  pageEl.style.setProperty('--page-h', `${Math.round(660 * r)}px`);
 }
 
 function cmd(run: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>): void {
@@ -610,7 +621,7 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  syncJustify(); syncColumns();
+  syncJustify(); syncColumns(); syncPageGuides();
   renderRibbon();
   schedulePreview();
 }
@@ -754,7 +765,7 @@ function openTemplateModal(): void {
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
-        syncJustify(); syncColumns();
+        syncJustify(); syncColumns(); syncPageGuides();
         closeModal();
         renderRibbon();
         schedulePreview();
