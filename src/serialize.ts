@@ -62,6 +62,7 @@ function inline(node: PMNode): string {
     else if (child.type.name === 'hardBreak') out += ' \\\n';
     else if (child.type.name === 'footnote') out += `#footnote[${escapeMarkup((child.attrs.content as string) || '')}]`;
     else if (child.type.name === 'mathInline') out += `$${(child.attrs.src as string) || ''}$`;
+    else if (child.type.name === 'reference') out += `@${(child.attrs.target as string) || ''}`;
     else out += inline(child); // defensive
   });
   return out;
@@ -97,8 +98,10 @@ function serializeList(node: PMNode, marker: string, depth: number): string {
 
 function serializeBlock(node: PMNode): string {
   switch (node.type.name) {
-    case 'heading':
-      return `${'='.repeat(node.attrs.level as number)} ${inline(node)}`;
+    case 'heading': {
+      const label = (node.attrs.label as string) || '';
+      return `${'='.repeat(node.attrs.level as number)} ${inline(node)}${label ? ` <${label}>` : ''}`;
+    }
     case 'paragraph':
       return inline(node);
     case 'bulletList':

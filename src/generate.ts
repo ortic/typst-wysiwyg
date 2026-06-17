@@ -29,6 +29,7 @@ function genStyle(style: DocStyle): string {
   if (style.text.font.trim() !== '') textArgs.unshift(`font: ${quote(style.text.font.trim())}`);
   lines.push(`#set text(${textArgs.join(', ')})`);
   lines.push(`#set par(leading: ${style.par.leadingEm}em, justify: ${style.par.justify})`);
+  if (style.page.headingNumbering) lines.push(`#set heading(numbering: "1.1")`);
   return lines.join('\n');
 }
 

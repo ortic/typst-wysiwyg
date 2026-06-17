@@ -20,6 +20,45 @@ import Image from '@tiptap/extension-image';
 import TextStyle from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
+import Heading from '@tiptap/extension-heading';
+
+// Headings can carry a Typst label (`= Title <label>`) referenced by @label.
+const LabeledHeading = Heading.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      label: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-label'),
+        renderHTML: (attrs) => (attrs.label ? { 'data-label': attrs.label } : {}),
+      },
+    };
+  },
+});
+
+// Inline cross-reference: @label.
+const Reference = Node.create({
+  name: 'reference',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      target: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-ref') ?? '',
+        renderHTML: (attrs) => ({ 'data-ref': attrs.target }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-ref]' }];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'doc-ref' }), `@${node.attrs.target}`];
+  },
+});
 import { createMathNodeView } from './mathview';
 import { createMathInlineView } from './mathinlineview';
 import { createFootnoteView } from './footnoteview';
@@ -217,9 +256,11 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       Pagination,
       SlashMenu.configure({ items: slashItems }),
       StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
+        heading: false, // replaced by LabeledHeading
         // codeBlock is kept and reused as the raw-Typst block.
       }),
+      LabeledHeading.configure({ levels: [1, 2, 3] }),
+      Reference,
       Link.configure({ openOnClick: false, autolink: true }),
       TextStyle,
       Color,

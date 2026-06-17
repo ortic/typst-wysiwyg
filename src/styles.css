@@ -112,6 +112,14 @@ select, input[type=text], input[type=number], textarea {
 .page h2 { font-size: 1.2em; font-weight: 700; margin: .85em 0 .45em; line-height: 1.3; }
 .page h3 { font-size: 1.05em; font-weight: 700; margin: .8em 0 .4em; line-height: 1.3; }
 .page p  { margin: 0 0 .7em; }
+/* heading numbering (mirrors Typst's #set heading(numbering: "1.1")) */
+.page.numbered .ProseMirror { counter-reset: h1 h2 h3; }
+.page.numbered h1 { counter-increment: h1; counter-reset: h2 h3; }
+.page.numbered h2 { counter-increment: h2; counter-reset: h3; }
+.page.numbered h3 { counter-increment: h3; }
+.page.numbered h1::before { content: counter(h1) "  "; }
+.page.numbered h2::before { content: counter(h1) "." counter(h2) "  "; }
+.page.numbered h3::before { content: counter(h1) "." counter(h2) "." counter(h3) "  "; }
 .page.justify .ProseMirror p { text-align: justify; }
 /* page-wide columns: Typst fills the first column before the next, so use
    column-fill:auto against the page height rather than balancing. */
@@ -130,6 +138,11 @@ select, input[type=text], input[type=number], textarea {
 .page li > p { margin: 0; }
 .page a { color: #2f6fed; text-decoration: underline; }
 .page strong { font-weight: 700; }
+.doc-ref { color: #2f6fed; background: #eef2ff; border-radius: 3px; padding: 0 3px; cursor: default; font-size: .92em; }
+.ref-pick { display: flex; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+.ref-pick:hover { background: #eef0f4; }
+.ref-tag { color: #2f6fed; font-family: ui-monospace, monospace; font-size: 12px; min-width: 90px; }
+.ref-text { color: #353b49; }
 .page mark { background: #fde68a; border-radius: 2px; padding: 0 1px; color: inherit; }
 .page blockquote { margin: 0 0 .8em; padding-left: 14px; border-left: 3px solid #cdd2dc; color: #4b5563; }
 .page hr { border: none; border-top: 1px solid #cdd2dc; margin: 1.2em 0; }

@@ -126,6 +126,7 @@ function parseInline(s: string): PMInline[] {
     if (c === '_') { flush(); active.has('italic') ? active.delete('italic') : active.add('italic'); i++; continue; }
     if (c === '`') { const j = s.indexOf('`', i + 1); if (j > i) { flush(); out.push({ type: 'text', text: s.slice(i + 1, j), marks: [{ type: 'code' }] } as PMText); i = j + 1; continue; } }
     if (c === '$') { const j = s.indexOf('$', i + 1); if (j > i) { flush(); out.push({ type: 'mathInline', attrs: { src: s.slice(i + 1, j).trim() } }); i = j + 1; continue; } }
+    if (c === '@') { const m = s.slice(i).match(/^@([\w-]+)/); if (m) { flush(); out.push({ type: 'reference', attrs: { target: m[1] } }); i += m[0].length; continue; } }
     if (c === '#') {
       const m = s.slice(i).match(/^#([a-zA-Z][a-zA-Z0-9_.]*)/);
       if (m) {
@@ -211,7 +212,15 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     const t = lines[i].trim();
 
     const h = t.match(/^(={1,6})\s+(.*)$/);
-    if (h) { blocks.push({ type: 'heading', attrs: { level: Math.min(h[1].length, 3) }, content: parseInline(h[2]) }); i++; continue; }
+    if (h) {
+      let text = h[2];
+      let label: string | null = null;
+      const lm = text.match(/\s*<([\w-]+)>\s*$/);
+      if (lm) { label = lm[1]; text = text.slice(0, lm.index); }
+      blocks.push({ type: 'heading', attrs: { level: Math.min(h[1].length, 3), label }, content: parseInline(text) });
+      i++;
+      continue;
+    }
 
     if (/^[-+]\s+/.test(t)) {
       const ordered = t[0] === '+';
@@ -307,6 +316,7 @@ function parseStyle(text: string): DocLogic['style'] {
     const leading = par[1].match(/leading:\s*([\d.]+)em/); if (leading) style.par.leadingEm = parseFloat(leading[1]);
     style.par.justify = /justify:\s*true/.test(par[1]);
   }
+  if (/#set heading\([^\n]*numbering:/.test(text)) style.page.headingNumbering = true;
   return style;
 }
 

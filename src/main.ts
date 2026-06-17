@@ -153,7 +153,7 @@ function mountEditor(content: object): void {
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
   installImageDropPaste(pageEl);
-  syncJustify(); syncColumns(); syncPageMetrics();
+  syncJustify(); syncColumns(); syncNumbering(); syncPageMetrics();
 }
 
 function syncJustify(): void {
@@ -165,6 +165,10 @@ function syncColumns(): void {
   pageEl.classList.remove('cols-2', 'cols-3');
   if (n === 2) pageEl.classList.add('cols-2');
   else if (n >= 3) pageEl.classList.add('cols-3');
+}
+
+function syncNumbering(): void {
+  pageEl.classList.toggle('numbered', !!logic.style.page.headingNumbering);
 }
 
 // Render the editor sheet as a faithful scaled copy of the Typst page so line
@@ -338,6 +342,48 @@ const OPEN_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" s
 const SAVE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3M8 14h8"/></svg>';
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
 const COLUMNS_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg>';
+const LABEL_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v5l9 9 7-7-9-9H3z"/><circle cx="7" cy="11" r="1.3" fill="currentColor" stroke="none"/></svg>';
+
+/** Attach a Typst label to the current heading (referenced by @label). */
+function setHeadingLabel(): void {
+  if (!editor.isActive('heading')) { alert('Place the cursor in a heading first, then add a label.'); return; }
+  const current = (editor.getAttributes('heading').label as string) || '';
+  const input = window.prompt('Label for this heading (letters, digits, - and _):', current);
+  if (input === null) return;
+  const label = input.trim().replace(/[^\w-]/g, '-').replace(/^-+|-+$/g, '');
+  editor.chain().focus().updateAttributes('heading', { label: label || null }).run();
+  schedulePreview();
+}
+
+interface LabelInfo { label: string; text: string }
+function collectLabels(): LabelInfo[] {
+  const out: LabelInfo[] = [];
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'heading' && node.attrs.label) out.push({ label: node.attrs.label as string, text: node.textContent });
+  });
+  return out;
+}
+
+/** Insert an @reference, picking from the document's labelled headings. */
+function insertReference(): void {
+  const labels = collectLabels();
+  if (!labels.length) { alert('No labels yet. Select a heading and use Insert › Label first.'); return; }
+  const modal = el('div', { class: 'modal' });
+  const list = el('div', { class: 'def-list' });
+  for (const l of labels) {
+    const row = el('div', { class: 'ref-pick' }, el('span', { class: 'ref-tag' }, `@${l.label}`), el('span', { class: 'ref-text' }, l.text || '(untitled)'));
+    row.onclick = () => {
+      editor.chain().focus().insertContent({ type: 'reference', attrs: { target: l.label } }).run();
+      // Typst can only reference headings when they're numbered.
+      if (!logic.style.page.headingNumbering) { logic.style.page.headingNumbering = true; syncNumbering(); renderRibbon(); }
+      closeModal();
+      schedulePreview();
+    };
+    list.append(row);
+  }
+  modal.append(el('div', { class: 'modal-head' }, el('h3', {}, 'Insert reference'), el('div', { class: 'muted' }, 'Link to a labelled heading (@label).')), list);
+  openModal(modal);
+}
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -411,6 +457,9 @@ function ribbonGroups(): Node[] {
       const pageNums = rbtn('#', 'Page #', () => {
         s.page.numbering = !s.page.numbering; renderRibbon(); schedulePreview();
       }, !!s.page.numbering);
+      const headNums = rbtn('1.1', 'Number headings', () => {
+        s.page.headingNumbering = !s.page.headingNumbering; syncNumbering(); renderRibbon(); schedulePreview();
+      }, !!s.page.headingNumbering);
       return [
         group('Page',
           rfield('Paper', paper),
@@ -419,6 +468,7 @@ function ribbonGroups(): Node[] {
         ),
         group('Text', rfield('Font', fontInput(s.text.font, (v) => (s.text.font = v))), rfield('Size pt', num(s.text.sizePt, (v) => { s.text.sizePt = v; syncPageMetrics(); }))),
         group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => { s.par.leadingEm = v; syncPageMetrics(); }, 0.05)), just),
+        group('Headings', headNums),
         group('Header & footer',
           rfield('Header', txtInput(s.page.header ?? '', (v) => (s.page.header = v), 'optional', 130)),
           rfield('Footer', txtInput(s.page.footer ?? '', (v) => (s.page.footer = v), 'optional', 130)),
@@ -446,6 +496,8 @@ function ribbonGroups(): Node[] {
         ),
         group('References',
           rbtn('†', 'Footnote', () => cmd((c) => c.insertContent({ type: 'footnote', attrs: { content: '' } }))),
+          rbtn(LABEL_ICON, 'Label', setHeadingLabel),
+          rbtn('@', 'Reference', insertReference),
         ),
         group('Logic',
           rbtn('ƒ', 'Definitions', openDefinitionsModal),
@@ -637,7 +689,7 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  syncJustify(); syncColumns(); syncPageMetrics();
+  syncJustify(); syncColumns(); syncNumbering(); syncPageMetrics();
   renderRibbon();
   schedulePreview();
 }
@@ -782,7 +834,7 @@ function openTemplateModal(): void {
 
   const applyAndClose = (apply: () => void) => {
     apply();
-    syncJustify(); syncColumns(); syncPageMetrics();
+    syncJustify(); syncColumns(); syncNumbering(); syncPageMetrics();
     closeModal();
     renderRibbon();
     schedulePreview();
