@@ -99,6 +99,10 @@ function buildInlineFn(name: string, args: string | null, content: string | null
     case 'emph': return withMark(parseInline(content ?? ''), 'italic');
     case 'underline': return parseInline(content ?? '');
     case 'footnote': return [{ type: 'footnote', attrs: { content: unescapeMarkup(content ?? '').trim() } }];
+    case 'ref': case 'cite': {
+      const key = args?.match(/<([\w-]+)>/)?.[1] ?? args?.match(/"([\w-]+)"/)?.[1] ?? '';
+      return key ? [{ type: 'reference', attrs: { target: key } }] : null;
+    }
     case 'raw': {
       const code = args?.match(/"((?:[^"\\]|\\.)*)"/)?.[1] ?? '';
       return [{ type: 'text', text: code, marks: [{ type: 'code' }] }];
@@ -235,6 +239,10 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     }
 
     if (t === '#pagebreak()') { blocks.push({ type: 'pageBreak' }); i++; continue; }
+
+    // The bibliography file lives in the VFS, not the source — drop the call
+    // on import (it's restored from embedded state / re-added in the modal).
+    if (t.startsWith('#bibliography(')) { i++; continue; }
 
     // Fenced code listing: ```lang … ``` (3+ backticks, matching close).
     const fence = lines[i].match(/^(`{3,})([A-Za-z0-9_-]*)\s*$/);

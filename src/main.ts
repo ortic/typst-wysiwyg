@@ -2,7 +2,7 @@ import './styles.css';
 import type { Editor } from '@tiptap/core';
 import type { DocLogic, LetBinding, ShowRule, ShowTarget } from './model';
 import { uid } from './model';
-import { generate } from './generate';
+import { generate, bibPath, extractCitationKeys } from './generate';
 import { renderSvg, renderPdf } from './typst';
 import { TEMPLATES, TEMPLATE_ICONS } from './templates';
 import { highlightTypst } from './highlight';
@@ -154,7 +154,7 @@ function mountEditor(content: object): void {
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
   installImageDropPaste(pageEl);
-  syncJustify(); syncColumns(); syncNumbering(); syncPageMetrics();
+  syncJustify(); syncColumns(); syncNumbering(); syncBibliography(); syncPageMetrics();
 }
 
 function syncJustify(): void {
@@ -170,6 +170,16 @@ function syncColumns(): void {
 
 function syncNumbering(): void {
   pageEl.classList.toggle('numbered', !!logic.style.page.headingNumbering);
+}
+
+// Mirror logic.bibliography into the compiler's VFS so #bibliography("/refs.…")
+// resolves. The bytes also ride along in the saved document's `assets` map.
+function syncBibliography(): void {
+  for (const p of [...assets.keys()]) if (/^\/refs\.(bib|yml)$/.test(p)) assets.delete(p);
+  const bib = logic.bibliography;
+  if (bib && bib.content.trim()) {
+    assets.set(bibPath(bib.format), new TextEncoder().encode(bib.content));
+  }
 }
 
 // Render the editor sheet as a faithful scaled copy of the Typst page so line
@@ -376,24 +386,69 @@ function collectLabels(): LabelInfo[] {
   return out;
 }
 
-/** Insert an @reference, picking from the document's labelled headings. */
+/** Insert an @reference, picking from labelled headings or bibliography keys. */
 function insertReference(): void {
   const labels = collectLabels();
-  if (!labels.length) { alert('No labels yet. Select a heading and use Insert › Label first.'); return; }
+  const bibKeys = logic.bibliography ? extractCitationKeys(logic.bibliography) : [];
+  if (!labels.length && !bibKeys.length) {
+    alert('Nothing to reference yet. Add a heading label (Insert › Label) or a bibliography (Insert › Bibliography).');
+    return;
+  }
   const modal = el('div', { class: 'modal' });
   const list = el('div', { class: 'def-list' });
+  const pick = (target: string, isCitation: boolean) => {
+    editor.chain().focus().insertContent({ type: 'reference', attrs: { target } }).run();
+    // Heading references need numbering; citations resolve via #bibliography.
+    if (!isCitation && !logic.style.page.headingNumbering) {
+      logic.style.page.headingNumbering = true; syncNumbering(); renderRibbon();
+    }
+    closeModal();
+    schedulePreview();
+  };
   for (const l of labels) {
     const row = el('div', { class: 'ref-pick' }, el('span', { class: 'ref-tag' }, `@${l.label}`), el('span', { class: 'ref-text' }, l.text || '(untitled)'));
-    row.onclick = () => {
-      editor.chain().focus().insertContent({ type: 'reference', attrs: { target: l.label } }).run();
-      // Typst can only reference headings when they're numbered.
-      if (!logic.style.page.headingNumbering) { logic.style.page.headingNumbering = true; syncNumbering(); renderRibbon(); }
-      closeModal();
-      schedulePreview();
-    };
+    row.onclick = () => pick(l.label, false);
     list.append(row);
   }
-  modal.append(el('div', { class: 'modal-head' }, el('h3', {}, 'Insert reference'), el('div', { class: 'muted' }, 'Link to a labelled heading (@label).')), list);
+  for (const k of bibKeys) {
+    const row = el('div', { class: 'ref-pick' }, el('span', { class: 'ref-tag cite' }, `@${k}`), el('span', { class: 'ref-text' }, 'citation'));
+    row.onclick = () => pick(k, true);
+    list.append(row);
+  }
+  modal.append(el('div', { class: 'modal-head' }, el('h3', {}, 'Insert reference'), el('div', { class: 'muted' }, 'Cross-reference a heading or cite a bibliography entry (@key).')), list);
+  openModal(modal);
+}
+
+/** Edit the document bibliography (BibTeX or Hayagriva YAML). */
+function openBibliographyModal(): void {
+  const bib = logic.bibliography ?? { format: 'bibtex' as const, content: '' };
+  const modal = el('div', { class: 'modal modal-wide' });
+  const fmt = el('select', {}) as HTMLSelectElement;
+  for (const [v, label] of [['bibtex', 'BibTeX (.bib)'], ['yaml', 'Hayagriva (.yml)']] as const) {
+    const o = el('option', { value: v }, label);
+    if (bib.format === v) o.selected = true;
+    fmt.append(o);
+  }
+  const ta = el('textarea', { class: 'bib-area', rows: '14', spellcheck: 'false',
+    placeholder: '@article{smith2020,\n  title = {A Study},\n  author = {Smith, Jane},\n  year = {2020},\n}' }) as HTMLTextAreaElement;
+  ta.value = bib.content;
+  const save = el('button', { class: 'btn primary' }, 'Save bibliography');
+  save.onclick = () => {
+    const content = ta.value.trim();
+    logic.bibliography = content ? { format: fmt.value as 'bibtex' | 'yaml', content } : undefined;
+    syncBibliography();
+    closeModal();
+    schedulePreview();
+  };
+  const clear = el('button', { class: 'btn' }, 'Remove');
+  clear.onclick = () => { logic.bibliography = undefined; syncBibliography(); closeModal(); schedulePreview(); };
+  modal.append(
+    el('div', { class: 'modal-head' }, el('h3', {}, 'Bibliography'),
+      el('div', { class: 'muted' }, 'Paste references, then cite them with Insert › Reference. Saved with the document.')),
+    el('label', { class: 'rfield' }, el('span', {}, 'Format'), fmt),
+    ta,
+    el('div', { class: 'modal-foot' }, clear, save),
+  );
   openModal(modal);
 }
 function rfield(label: string, control: Node): HTMLElement {
@@ -511,6 +566,7 @@ function ribbonGroups(): Node[] {
           rbtn('†', 'Footnote', () => cmd((c) => c.insertContent({ type: 'footnote', attrs: { content: '' } }))),
           rbtn(LABEL_ICON, 'Label', setHeadingLabel),
           rbtn('@', 'Reference', insertReference),
+          rbtn('“”', 'Bibliography', openBibliographyModal, !!logic.bibliography),
         ),
         group('Logic',
           rbtn('ƒ', 'Definitions', openDefinitionsModal),
@@ -702,7 +758,7 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  syncJustify(); syncColumns(); syncNumbering(); syncPageMetrics();
+  syncJustify(); syncColumns(); syncNumbering(); syncBibliography(); syncPageMetrics();
   renderRibbon();
   schedulePreview();
 }
@@ -847,7 +903,7 @@ function openTemplateModal(): void {
 
   const applyAndClose = (apply: () => void) => {
     apply();
-    syncJustify(); syncColumns(); syncNumbering(); syncPageMetrics();
+    syncJustify(); syncColumns(); syncNumbering(); syncBibliography(); syncPageMetrics();
     closeModal();
     renderRibbon();
     schedulePreview();

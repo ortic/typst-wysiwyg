@@ -62,7 +62,9 @@ function inline(node: PMNode): string {
     else if (child.type.name === 'hardBreak') out += ' \\\n';
     else if (child.type.name === 'footnote') out += `#footnote[${escapeMarkup((child.attrs.content as string) || '')}]`;
     else if (child.type.name === 'mathInline') out += `$${(child.attrs.src as string) || ''}$`;
-    else if (child.type.name === 'reference') out += `@${(child.attrs.target as string) || ''}`;
+    // #ref(<key>) rather than @key: the @ form greedily eats trailing word
+    // characters ("@smith2020Quarterly"), so use the explicit, terminated form.
+    else if (child.type.name === 'reference') out += `#ref(<${(child.attrs.target as string) || ''}>)`;
     else out += inline(child); // defensive
   });
   return out;

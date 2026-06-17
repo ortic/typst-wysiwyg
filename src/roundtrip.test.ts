@@ -79,7 +79,7 @@ describe('generated Typst', () => {
     const { typ } = cycle(SAMPLES.numberedRefs);
     expect(typ).toContain('#set heading(numbering: "1.1")');
     expect(typ).toContain('<results>');
-    expect(typ).toContain('@results');
+    expect(typ).toContain('#ref(<results>)');
   });
 
   it('fences code listings with the language tag', () => {

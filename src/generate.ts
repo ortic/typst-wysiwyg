@@ -94,6 +94,33 @@ export function generate(logic: DocLogic, content: PMNode): string {
   parts.push('');
   parts.push('// --- content ---');
   parts.push(serializeContent(content));
+
+  if (logic.bibliography && logic.bibliography.content.trim()) {
+    const ext = logic.bibliography.format === 'yaml' ? 'yml' : 'bib';
+    parts.push('');
+    parts.push(`#bibliography(${quote(`/refs.${ext}`)})`);
+  }
+
   parts.push('');
   return parts.join('\n');
+}
+
+/** The VFS path the bibliography file is mapped to for a given format. */
+export function bibPath(format: 'bibtex' | 'yaml'): string {
+  return `/refs.${format === 'yaml' ? 'yml' : 'bib'}`;
+}
+
+/** Pull citation keys out of a BibTeX or Hayagriva-YAML source. */
+export function extractCitationKeys(bib: { format: 'bibtex' | 'yaml'; content: string }): string[] {
+  const keys: string[] = [];
+  if (bib.format === 'bibtex') {
+    for (const m of bib.content.matchAll(/@\w+\s*\{\s*([^,\s}]+)/g)) keys.push(m[1]);
+  } else {
+    // Hayagriva: top-level (column-0) `key:` entries.
+    for (const line of bib.content.split('\n')) {
+      const m = line.match(/^([A-Za-z0-9_:.-]+):\s*$/);
+      if (m) keys.push(m[1]);
+    }
+  }
+  return keys;
 }

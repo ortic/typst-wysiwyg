@@ -142,6 +142,9 @@ select, input[type=text], input[type=number], textarea {
 .ref-pick { display: flex; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
 .ref-pick:hover { background: #eef0f4; }
 .ref-tag { color: #2f6fed; font-family: ui-monospace, monospace; font-size: 12px; min-width: 90px; }
+.ref-tag.cite { color: #b45309; }
+.bib-area { width: 100%; margin: 0 20px; box-sizing: border-box; width: calc(100% - 40px);
+  font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.5; resize: vertical; }
 .ref-text { color: #353b49; }
 .page mark { background: #fde68a; border-radius: 2px; padding: 0 1px; color: inherit; }
 .page blockquote { margin: 0 0 .8em; padding-left: 14px; border-left: 3px solid #cdd2dc; color: #4b5563; }

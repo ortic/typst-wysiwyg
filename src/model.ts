@@ -54,11 +54,18 @@ export interface ShowRule {
   };
 }
 
+/** A bibliography source: raw BibTeX or Hayagriva YAML, mapped into the VFS. */
+export interface Bibliography {
+  format: 'bibtex' | 'yaml';
+  content: string;
+}
+
 /** The non-content part of a document (content is the ProseMirror doc). */
 export interface DocLogic {
   style: DocStyle;
   lets: LetBinding[];
   shows: ShowRule[];
+  bibliography?: Bibliography;
 }
 
 let counter = 0;
