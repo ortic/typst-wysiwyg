@@ -85,10 +85,30 @@ describe('generated Typst', () => {
     expect(typ).toContain('#ref(<results>)');
   });
 
-  it('fences code listings with the language tag', () => {
+  it('serializes code listings as #raw with the language tag', () => {
     const { typ } = cycle(SAMPLES.codeListing);
-    expect(typ).toMatch(/```python/);
+    expect(typ).toContain('#raw(');
+    expect(typ).toContain('block: true');
+    expect(typ).toContain('lang: "python"');
     expect(typ).toContain('def hello():');
+  });
+
+  it('keeps code listings whose content contains triple backticks intact', () => {
+    // A listing whose code literally contains a ``` line would break a fenced
+    // block; #raw + a quoted string must survive it and round-trip exactly.
+    const code = 'a = 1\n```\nprint(a)';
+    const doc = PMNode.fromJSON(schema, {
+      type: 'doc',
+      content: [{ type: 'codeListing', attrs: { language: 'python' }, content: [{ type: 'text', text: code }] }],
+    });
+    const typ = generate({ style: importTypst('').logic.style, lets: [], shows: [] }, doc);
+    expect(typ).toContain('#raw('); // a fence would break out; #raw can't
+    const back = importTypst(typ) as { content: { content: object[] } };
+    expect(back.content.content[0]).toMatchObject({
+      type: 'codeListing',
+      attrs: { language: 'python' },
+      content: [{ type: 'text', text: code }],
+    });
   });
 
   it('preserves callouts and columns as functions', () => {

@@ -14,6 +14,16 @@ function quote(s: string): string {
   return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
+/** A Typst string literal that survives any content (newlines, quotes, ticks). */
+function rawString(s: string): string {
+  return '"' + s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t') + '"';
+}
+
 /** A CSS color (hex or rgb()) -> a Typst color expression. */
 function typstColor(v: string): string {
   const t = v.trim();
@@ -115,12 +125,13 @@ function serializeBlock(node: PMNode): string {
     case 'codeBlock':
       return node.textContent; // raw Typst escape hatch — verbatim
     case 'codeListing': {
+      // #raw with a string argument can't break out of a delimiter the way a
+      // ```fence``` can (e.g. when the code itself contains triple backticks),
+      // so it's robust against any content.
       const code = node.textContent;
       const lang = ((node.attrs.language as string) || '').trim();
-      // Fence with one more backtick than the longest run inside the code.
-      const longest = Math.max(0, ...[...code.matchAll(/`+/g)].map((m) => m[0].length));
-      const fence = '`'.repeat(Math.max(3, longest + 1));
-      return `${fence}${lang && lang !== 'text' ? lang : ''}\n${code}\n${fence}`;
+      const langArg = lang && lang !== 'text' ? `, lang: ${quote(lang)}` : '';
+      return `#raw(${rawString(code)}, block: true${langArg})`;
     }
     case 'horizontalRule':
       return '#line(length: 100%)';

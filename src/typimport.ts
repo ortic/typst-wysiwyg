@@ -30,6 +30,11 @@ function unescapeMarkup(s: string): string {
   return s.replace(/\\([\\#$*_`<>@~[\]])/g, '$1');
 }
 
+/** Unescape a Typst string literal's contents (\n, \t, \", \\, …). */
+function unescapeTypstString(s: string): string {
+  return s.replace(/\\(.)/g, (_, c) => (c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c));
+}
+
 // --- low-level helpers ------------------------------------------------------
 /** Read a balanced span within a string, given the index of the opening char. */
 function readBalancedFrom(s: string, start: number, open: string, close: string): { content: string; end: number } {
@@ -267,6 +272,23 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     // The bibliography file lives in the VFS, not the source — drop the call
     // on import (it's restored from embedded state / re-added in the modal).
     if (t.startsWith('#bibliography(')) { i++; continue; }
+
+    // #raw("…", block: true, lang: "…") — our own code-listing form.
+    if (t.startsWith('#raw(') && /block:\s*true/.test(lines.slice(i, i + 20).join('\n'))) {
+      const { inner, next } = readBalancedLines(lines, i, '(', ')');
+      const strM = inner.match(/"((?:[^"\\]|\\.)*)"/);
+      if (strM) {
+        const code = unescapeTypstString(strM[1]);
+        const lang = inner.match(/lang:\s*"([^"]+)"/)?.[1] || 'text';
+        blocks.push({
+          type: 'codeListing',
+          attrs: { language: lang },
+          content: code ? [{ type: 'text', text: code }] : [],
+        });
+        i = next;
+        continue;
+      }
+    }
 
     // Fenced code listing: ```lang … ``` (3+ backticks, matching close).
     const fence = lines[i].match(/^(`{3,})([A-Za-z0-9_-]*)\s*$/);
