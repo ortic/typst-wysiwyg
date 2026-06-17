@@ -8,10 +8,15 @@ like: you edit a real document on a page-styled canvas, while the Typst-specific
 machinery (`#set` rules, `#let` definitions, templates) is managed through a familiar
 Word-style ribbon instead of raw code.
 
+### ▶ [Try the live demo](https://ortic.github.io/typst-wysiwyg/)
+
+The Typst compiler runs entirely in your browser via WebAssembly — nothing is uploaded.
+The first load fetches a ~28 MB compiler, so give it a moment.
+
 > ⚠️ This is an early prototype / spike, not a finished product. It is meant to
 > validate the core idea and UX, not to be production-ready.
 
-![Word-style ribbon over a live document canvas.](docs/screenshot.png)
+![The editor (left) with a live Typst preview (right).](docs/screenshot.png)
 
 ## The core idea
 
@@ -65,6 +70,7 @@ an icon.
 - **Context-sensitive ribbon tabs** (Word-style): selecting an image shows an **Image**
   tab (width, border); working in a table shows a **Table** tab (rows/columns, header,
   striped, borders).
+- **Slash (`/`) menu** to insert any block by typing, with search and keyboard nav.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
 - **Live Typst preview** (compiled in the browser via WASM), hidden by default and
@@ -125,7 +131,7 @@ Roughly in priority order. The first group is the most-requested missing content
 
 ### Editing experience
 
-- **Slash menu** (`/`) and a selection bubble toolbar for fast block/inline insertion.
+- ✅ **Slash menu** (`/`) — done. Still to add: a selection bubble toolbar.
 - **Drag-to-reorder** blocks from the six-dot handle (currently move up/down only).
 - **Find & replace**, and a document **outline / table-of-contents** panel (`#outline()`).
 
