@@ -20,7 +20,6 @@
       }
     ],
     "security": {
-      "comment": "CSP disabled: the app loads a WASM compiler and uses blob/data URLs.",
       "csp": null
     }
   },
