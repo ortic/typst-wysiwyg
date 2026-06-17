@@ -26,6 +26,8 @@ select, input[type=text], input[type=number], textarea {
 .tab-spacer { flex: 1; }
 .brand { display: flex; align-items: baseline; gap: 6px; padding: 0 6px 4px; }
 .brand .app { font-weight: 600; font-size: 13px; color: #1e2330; }
+.save-status { font-size: 12px; color: #2f9e44; opacity: 0; transition: opacity .2s; padding-right: 4px; }
+.save-status.show { opacity: 1; }
 .tab {
   border: none; background: none; padding: 6px 14px; border-radius: 6px 6px 0 0;
   color: #4b5563; font-size: 13px; cursor: pointer;

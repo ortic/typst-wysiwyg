@@ -10,11 +10,20 @@ export const assets = new Map<string, Uint8Array>();
 let counter = 0;
 
 export function addAsset(bytes: Uint8Array, ext: string): string {
-  counter += 1;
   const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext.toLowerCase() : 'png';
   // Absolute path: the compiler's main file is /main.typ (root is "/"), so the
   // shadow file and the `image("/assets/..")` reference both live under root.
-  const path = `/assets/img${counter}.${safeExt}`;
+  // Skip paths already in use (e.g. after restoring a saved document).
+  let path: string;
+  do {
+    counter += 1;
+    path = `/assets/img${counter}.${safeExt}`;
+  } while (assets.has(path));
   assets.set(path, bytes);
   return path;
+}
+
+/** Replace all assets (used when opening / restoring a document). */
+export function clearAssets(): void {
+  assets.clear();
 }

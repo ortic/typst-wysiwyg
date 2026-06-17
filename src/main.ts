@@ -8,7 +8,7 @@ import { TEMPLATES, TEMPLATE_ICONS } from './templates';
 import { highlightTypst } from './highlight';
 import { createEditor } from './editor';
 import { installBlockHandle } from './blockhandle';
-import { addAsset } from './assets';
+import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
 
 // The "/" command menu — insert any block by typing. `pickImage` is referenced
@@ -63,6 +63,7 @@ const previewPane = el('div', { class: 'preview hidden' });
 let previewTimer: number | undefined;
 
 function schedulePreview(): void {
+  scheduleAutosave(); // every change path runs through here
   if (!previewVisible) return;
   window.clearTimeout(previewTimer);
   previewTimer = window.setTimeout(refreshPreview, 300);
@@ -185,6 +186,7 @@ function renderRibbon(): void {
   }
   tabStrip.append(
     el('span', { class: 'tab-spacer' }),
+    el('span', { class: 'save-status' }, ''),
     el('span', { class: 'brand' }, el('span', { class: 'app' }, 'Typst WYSIWYG'), el('span', { class: 'muted' }, 'spike')),
   );
   ribbonBody.replaceChildren(...ribbonGroups());
@@ -206,6 +208,8 @@ const LINK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" s
 const TABLE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>';
 const IMAGE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>';
 const PAGEBREAK_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h7l5 5v3"/><path d="M13 3v5h5"/><path d="M6 21h7l5-5"/><path d="M3 14h18" stroke-dasharray="2 2"/></svg>';
+const OPEN_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const SAVE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3M8 14h8"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
 }
@@ -240,6 +244,7 @@ function ribbonGroups(): Node[] {
           rbtn('❝', 'Callout', () => cmd((c) => c.toggleWrap('callout')), a.isActive('callout')),
           rbtn('</>', 'Raw', () => cmd((c) => c.toggleCodeBlock()), a.isActive('codeBlock')),
         ),
+        group('File', rbtn(OPEN_ICON, 'Open', openFromFile), rbtn(SAVE_ICON, 'Save', saveToFile)),
         group('Export', rbtn('⤓', '.typ', exportTyp), rbtn('⬇', 'PDF', exportPdf)),
       ];
     case 'layout': {
@@ -380,6 +385,101 @@ function download(name: string, blob: Blob): void {
   // Revoke after the click has been processed so the download isn't cancelled.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+// ---------------------------------------------------------------------------
+// Persistence: save/open a .typwys file and autosave to localStorage
+// ---------------------------------------------------------------------------
+const DOC_VERSION = 1;
+const LS_KEY = 'typst-wysiwyg:doc';
+
+interface SavedDoc {
+  version: number;
+  logic: DocLogic;
+  content: unknown;
+  assets: Record<string, string>; // path -> base64
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function currentDoc(): SavedDoc {
+  const assetObj: Record<string, string> = {};
+  for (const [path, bytes] of assets) assetObj[path] = bytesToB64(bytes);
+  return { version: DOC_VERSION, logic, content: editor.getJSON(), assets: assetObj };
+}
+
+function applyDoc(data: SavedDoc): void {
+  if (!data || typeof data !== 'object' || !data.content) throw new Error('Not a typst-wysiwyg document');
+  logic = data.logic;
+  clearAssets();
+  if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
+  editor.commands.setContent(data.content as never);
+  syncJustify();
+  renderRibbon();
+  schedulePreview();
+}
+
+function saveToFile(): void {
+  download('document.typwys', new Blob([JSON.stringify(currentDoc())], { type: 'application/json' }));
+  flashSaved();
+}
+
+const docInput = el('input', { type: 'file', accept: '.typwys,.json,application/json' }) as HTMLInputElement;
+docInput.style.display = 'none';
+document.body.appendChild(docInput);
+function openFromFile(): void {
+  docInput.value = '';
+  docInput.onchange = async () => {
+    const file = docInput.files?.[0];
+    if (!file) return;
+    try { applyDoc(JSON.parse(await file.text()) as SavedDoc); }
+    catch (e) { alert('Could not open file:\n' + String(e)); }
+  };
+  docInput.click();
+}
+
+let autosaveTimer: number | undefined;
+function scheduleAutosave(): void {
+  window.clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => {
+    if (!editor) return;
+    const doc = currentDoc();
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(doc));
+    } catch {
+      // Over quota (e.g. large images): keep at least the text content.
+      try { localStorage.setItem(LS_KEY, JSON.stringify({ ...doc, assets: {} })); } catch { /* give up */ }
+    }
+  }, 1200);
+}
+function loadSaved(): SavedDoc | null {
+  try {
+    const s = localStorage.getItem(LS_KEY);
+    return s ? (JSON.parse(s) as SavedDoc) : null;
+  } catch { return null; }
+}
+
+let savedFlashTimer: number | undefined;
+function flashSaved(): void {
+  const status = document.querySelector<HTMLElement>('.save-status');
+  if (!status) return;
+  status.textContent = 'Saved ✓';
+  status.classList.add('show');
+  window.clearTimeout(savedFlashTimer);
+  savedFlashTimer = window.setTimeout(() => status.classList.remove('show'), 1500);
+}
 function txtInput(value: string, on: (v: string) => void, placeholder = '', width = 90): HTMLInputElement {
   const i = el('input', { type: 'text', placeholder }) as HTMLInputElement;
   i.value = value; i.style.width = `${width}px`;
@@ -422,6 +522,7 @@ function openTemplateModal(): void {
       card.onclick = () => {
         const made = t.make();
         logic = made.logic;
+        clearAssets();
         editor.commands.setContent(made.content as never);
         syncJustify();
         closeModal();
@@ -593,12 +694,23 @@ function openSourceModal(): void {
   openModal(modal);
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+  // Ctrl/Cmd+S saves to a file instead of the browser's page save.
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveToFile(); }
+});
 
 // ---------------------------------------------------------------------------
-// Boot
+// Boot — restore the last session if one was autosaved, else the default doc.
 // ---------------------------------------------------------------------------
 const main = el('div', { class: 'main' }, canvasWrap, previewPane);
 app.replaceChildren(ribbon(), main);
-mountEditor(initial.content);
+
+const restored = loadSaved();
+if (restored) {
+  logic = restored.logic ?? initial.logic;
+  clearAssets();
+  if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
+}
+mountEditor((restored?.content ?? initial.content) as object);
 renderRibbon();

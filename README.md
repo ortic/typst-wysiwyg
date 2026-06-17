@@ -71,6 +71,8 @@ an icon.
   tab (width, border); working in a table shows a **Table** tab (rows/columns, header,
   striped, borders).
 - **Slash (`/`) menu** to insert any block by typing, with search and keyboard nav.
+- **Save / open** documents (`.typwys`, images included) and **autosave** to the browser,
+  restored on reload (Ctrl/Cmd+S to save).
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
 - **Live Typst preview** (compiled in the browser via WASM), hidden by default and
@@ -143,7 +145,7 @@ Roughly in priority order. The first group is the most-requested missing content
 
 ### Persistence & app
 
-- **Save / load** documents (state is currently in-memory only) with autosave.
+- ✅ **Save / load** documents (`.typwys`) with autosave + restore — done.
 - **Import of existing `.typ`** — the model is generated one-way today; import needs a
   parser and will be tightly scoped.
 - **User templates** — save the current document as a reusable template.
