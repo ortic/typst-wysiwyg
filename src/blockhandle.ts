@@ -49,9 +49,78 @@ export function installBlockHandle(editor: Editor, pageEl: HTMLElement): void {
   editor.on('focus', reposition);
   editor.on('create', reposition);
 
-  // Keep the editor selection when interacting with the handle.
-  handle.addEventListener('mousedown', (e) => e.preventDefault());
-  handle.addEventListener('click', (e) => { e.stopPropagation(); openMenu(); });
+  // --- drag-to-reorder -----------------------------------------------------
+  const indicator = document.createElement('div');
+  indicator.className = 'drop-indicator';
+  indicator.style.display = 'none';
+  pageEl.appendChild(indicator);
+
+  let dropIndex = 0;
+  const topBlocks = (): HTMLElement[] => Array.from(editor.view.dom.children) as HTMLElement[];
+
+  // Pointer-based drag (more robust than native HTML5 DnD, and testable). A
+  // press that moves past a threshold is a drag; a plain click opens the menu.
+  function computeDrop(clientY: number): void {
+    const blocks = topBlocks();
+    const pmRect = pageEl.getBoundingClientRect();
+    dropIndex = blocks.length;
+    for (let i = 0; i < blocks.length; i++) {
+      const r = blocks[i].getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) { dropIndex = i; break; }
+    }
+    const y = dropIndex < blocks.length
+      ? blocks[dropIndex].getBoundingClientRect().top - pmRect.top
+      : blocks[blocks.length - 1].getBoundingClientRect().bottom - pmRect.top;
+    indicator.style.display = 'block';
+    indicator.style.top = `${y - 1}px`;
+  }
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
+    const info = currentBlock();
+    if (!info) return;
+    const startY = e.clientY;
+    let dragging = false;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging && Math.abs(ev.clientY - startY) < 4) return;
+      dragging = true;
+      handle.classList.add('dragging');
+      computeDrop(ev.clientY);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      indicator.style.display = 'none';
+      handle.classList.remove('dragging');
+      if (dragging) moveToIndex(info.index, dropIndex);
+      else openMenu(); // a plain click
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  function moveToIndex(from: number, to: number): void {
+    if (to === from || to === from + 1) return; // dropped in the same place
+    editor.commands.command(({ state, tr, dispatch }) => {
+      const node = state.doc.child(from);
+      const posBefore = (i: number) => { let p = 0; for (let k = 0; k < i; k++) p += state.doc.child(k).nodeSize; return p; };
+      const start = posBefore(from);
+      const end = start + node.nodeSize;
+      const insertAt = posBefore(to);
+      if (!dispatch) return true;
+      tr.delete(start, end);
+      const mapped = tr.mapping.map(insertAt);
+      tr.insert(mapped, node);
+      tr.setSelection(TextSelection.near(tr.doc.resolve(mapped + 1)));
+      tr.scrollIntoView();
+      return true;
+    });
+    editor.commands.focus();
+  }
+
   document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target as Node) && e.target !== handle) closeMenu(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 

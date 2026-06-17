@@ -197,6 +197,10 @@ select, input[type=text], input[type=number], textarea {
   color: #b6bcc6; cursor: pointer; border-radius: 4px; font-size: 15px; user-select: none; z-index: 5;
 }
 .pm-handle:hover { background: #eef0f4; color: #6b7280; }
+.pm-handle[draggable="true"] { cursor: grab; }
+.pm-handle.dragging { cursor: grabbing; opacity: .5; }
+.drop-indicator { position: absolute; left: 64px; right: 64px; height: 2px; background: #4f46e5; border-radius: 2px; pointer-events: none; z-index: 6; }
+.drop-indicator::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #4f46e5; }
 .block-menu {
   position: fixed; z-index: 50; background: #fff; border: 1px solid #d3d7df; border-radius: 8px;
   box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 5px; min-width: 184px; font-size: 13px;
