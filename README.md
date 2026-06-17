@@ -59,8 +59,9 @@ an icon.
 - **Inline formatting**: bold, italic, strike, links.
 - **Tables** — editable (add/remove rows & columns, resizable), full-width, serialized
   to `#table(...)`.
-- **Images** — insert a picture; it renders in the live preview too (the bytes are fed
-  to the Typst compiler's virtual filesystem) and serializes to `#image(...)`.
+- **Images** — insert, drag-and-drop or paste a picture; it renders in the live preview
+  too (the bytes are fed to the Typst compiler's virtual filesystem). Inline editable
+  **figure captions** → `#figure(image(..), caption: [..])`.
 - **Equations** — a block equation with a live-rendered (Typst-compiled) preview above an
   editable source field; serializes to `$ … $`.
 - **Inline math** — render Typst math at text size inside a paragraph; serializes to `$…$`.
@@ -71,12 +72,19 @@ an icon.
   tab (width, border); working in a table shows a **Table** tab (rows/columns, header,
   striped, borders).
 - **Slash (`/`) menu** to insert any block by typing, with search and keyboard nav.
+- **Selection bubble toolbar** (bold / italic / strike / code / link) and **drag-to-reorder**
+  blocks from the handle.
+- **Inline formatting**: bold, italic, strike, inline code, links, **text colour** and
+  **highlight**.
+- **Find & replace** (Ctrl/Cmd+F) with highlighted matches, and an **outline / TOC** panel.
+- **Page setup**: paper, margins, font (with suggestions), size, leading, justification,
+  **page numbers, header and footer**.
 - **Save / open** documents (`.typwys`, images included) and **autosave** to the browser,
-  restored on reload (Ctrl/Cmd+S to save).
+  restored on reload (Ctrl/Cmd+S to save). Native file dialogs in the desktop build.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, …) and a
   **`#let` definitions** editor.
-- **Live Typst preview** (compiled in the browser via WASM), hidden by default and
-  toggled from the View tab.
+- **Live Typst preview** (compiled in the browser via WASM) with friendly compile errors,
+  hidden by default and toggled from the View tab.
 - **Typst source viewer** with syntax highlighting (View → Typst source).
 - **Template gallery** with search and icons.
 - **Export** to `.typ` and PDF.
@@ -129,64 +137,36 @@ relative (`./`) for the Tauri bundle (`--mode tauri`), and `/` for `npm run dev`
 | File | Role |
 |------|------|
 | `src/model.ts` | The logic layer the editor owns (`#set` / `#let` / `#show`) |
-| `src/editor.ts` | TipTap/ProseMirror schema, custom Callout node, editor factory |
+| `src/editor.ts` | TipTap/ProseMirror schema, custom nodes, editor factory |
 | `src/serialize.ts` | ProseMirror document → Typst markup (inc. inline marks) |
 | `src/generate.ts` | Logic layer + serialized content → full `.typ` |
-| `src/blockhandle.ts` | The six-dot block handle and its block-style menu |
-| `src/typst.ts` | typst.ts (WASM) wrapper: `renderSvg` / `renderPdf` |
-| `src/highlight.ts` | Lightweight Typst syntax highlighter for the source viewer |
+| `src/blockhandle.ts` | The six-dot block handle: menu + drag-to-reorder |
+| `src/bubble.ts` | Selection formatting toolbar |
+| `src/slash.ts` | The `/` command menu |
+| `src/search.ts` | Find & replace plugin + helpers |
+| `src/{math,mathinline,footnote,image}view.ts` | NodeViews (live math, footnote, figure) |
+| `src/desktop.ts` | Native file dialogs (Tauri) |
+| `src/typst.ts` / `src/assets.ts` | WASM compiler wrapper + image asset store |
 | `src/templates.ts` | Templates (logic layer + ProseMirror content), picker icons |
 | `src/main.ts` | Ribbon, modals, preview, export — the UI shell |
 
 ## Roadmap / next steps
 
-Roughly in priority order. The first group is the most-requested missing content.
+Most of the editor is in place (see Features). What's left:
 
-### Rich content blocks (highest priority)
-
-- ✅ **Tables** — done (editable, resizable, full-width, `#table(...)`).
-- ✅ **Images** — done (insert from file; rendered in the preview via the compiler's
-  virtual filesystem; `#image(...)`). Still to add: drag-in, resizing, and a **figure**
-  wrapper (caption + label) → `#figure(image("..."), caption: [...])`.
-- ✅ **Equations** — done (block + inline math, both live-rendered, `$ … $`).
-- ✅ **Footnotes** — done (`#footnote[...]`). Still to add: labels + cross-references
-  (`<label>` / `@ref`), and `#cite` / `#bibliography`.
-- **Page breaks, columns and code listings** — ✅ page break (`#pagebreak()`) done; still
-  to add multi-column layout and a real (display) code block distinct from the raw-Typst
-  escape hatch.
-
-### Editing experience
-
-- ✅ **Slash menu** (`/`) — done. Still to add: a selection bubble toolbar.
-- **Drag-to-reorder** blocks from the six-dot handle (currently move up/down only).
-- **Find & replace**, and a document **outline / table-of-contents** panel (`#outline()`).
-
-### Document & logic layer
-
-- **Full function-style `#show` rules** (`#show heading: it => …`); the structured editor
-  covers common text restyling, the rest still needs the raw-Typst escape hatch.
-- **Headers/footers and page numbering**, font/color pickers, and per-section page setups.
-
-### Persistence & app
-
-- ✅ **Save / load** documents (`.typwys`) with autosave + restore — done.
+- **References & citations** — labels + cross-references (`<label>` / `@ref`), and
+  `#cite` / `#bibliography`.
+- **Multi-column layout** and a dedicated (display) **code listing** block, distinct from
+  the raw-Typst escape hatch.
 - **Import of existing `.typ`** — the model is generated one-way today; import needs a
   parser and will be tightly scoped.
-- **User templates** — save the current document as a reusable template.
-- ✅ **Desktop packaging** via a **Tauri** shell — scaffold done (`src-tauri/`); build a
-  binary with `npm run tauri:build`. Still to wire: native file dialogs, local fonts.
-
-### Engineering / hardening
-
-- **Harden the serializer** and add golden round-trip tests — known rough edges include
-  `code`-marked text not being escaped inside backticks, deeply nested lists, and unusual
-  selections.
-- **Map Typst compiler errors back to blocks** instead of showing a raw message.
-- **Compile in a web worker** and tune debouncing for large documents.
-
-### Explicitly deferred
-
-- **Real-time collaboration** — out of scope for now (single-user, local-first).
+- **Full function-style `#show` rules** (`#show heading: it => …`); the structured editor
+  covers common text restyling, the rest still uses the raw-Typst escape hatch.
+- **User templates** (save the current document as a template) and **per-section page
+  setups**.
+- **Engineering**: golden round-trip serializer tests, map compile errors back to the
+  offending block, and compile in a web worker for large documents.
+- **Explicitly deferred**: real-time collaboration (single-user, local-first for now).
 
 ## License
 
