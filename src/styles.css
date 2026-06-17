@@ -109,6 +109,21 @@ select, input[type=text], input[type=number], textarea {
 .page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
 .page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
 
+/* selection bubble toolbar */
+.bubble-menu {
+  position: fixed; z-index: 65; display: flex; gap: 2px; padding: 4px;
+  background: #1e2330; border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.28);
+}
+.bubble-btn {
+  background: none; border: none; color: #d7dce6; min-width: 28px; height: 26px;
+  padding: 0 7px; border-radius: 5px; cursor: pointer; font-size: 13px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.bubble-btn:hover { background: #2d3340; }
+.bubble-btn.active { background: #4f46e5; color: #fff; }
+.bubble-btn.i { font-style: italic; }
+.bubble-btn.s { text-decoration: line-through; }
+
 /* slash command menu */
 .slash-menu {
   position: fixed; z-index: 70; background: #fff; border: 1px solid #d3d7df; border-radius: 8px;

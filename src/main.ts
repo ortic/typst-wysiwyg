@@ -8,6 +8,7 @@ import { TEMPLATES, TEMPLATE_ICONS } from './templates';
 import { highlightTypst } from './highlight';
 import { createEditor } from './editor';
 import { installBlockHandle } from './blockhandle';
+import { installBubbleMenu } from './bubble';
 import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
 import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
@@ -95,6 +96,7 @@ function mountEditor(content: object): void {
     onSelection: syncContextualTabs,
   }, SLASH_ITEMS);
   installBlockHandle(editor, pageEl);
+  installBubbleMenu(editor, setLink);
   syncJustify();
 }
 
