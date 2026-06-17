@@ -231,8 +231,14 @@ async function exportPdf(): Promise<void> {
 function download(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const aEl = el('a', { href: url, download: name });
+  // The anchor must be in the DOM for the `download` filename to be honored in
+  // some browsers (otherwise the file is saved with the blob's nameless URL).
+  aEl.style.display = 'none';
+  document.body.appendChild(aEl);
   aEl.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(aEl);
+  // Revoke after the click has been processed so the download isn't cancelled.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 function txtInput(value: string, on: (v: string) => void, placeholder = '', width = 90): HTMLInputElement {
   const i = el('input', { type: 'text', placeholder }) as HTMLInputElement;
