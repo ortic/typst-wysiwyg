@@ -45,6 +45,13 @@ let editor!: Editor;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
+// Font suggestions for the Layout font field (free text still allowed).
+const FONT_SUGGESTIONS = [
+  'Linux Libertine', 'New Computer Modern', 'Libertinus Serif', 'DejaVu Sans', 'DejaVu Serif',
+  'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Fira Sans', 'Source Sans Pro',
+  'Noto Sans', 'Noto Serif',
+];
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -350,7 +357,7 @@ function ribbonGroups(): Node[] {
       }, !!s.page.numbering);
       return [
         group('Page', rfield('Paper', paper), rfield('Margin cm', num(s.page.marginCm, (v) => (s.page.marginCm = v)))),
-        group('Text', rfield('Font', txtInput(s.text.font, (v) => (s.text.font = v), 'Typst default', 130)), rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v)))),
+        group('Text', rfield('Font', fontInput(s.text.font, (v) => (s.text.font = v))), rfield('Size pt', num(s.text.sizePt, (v) => (s.text.sizePt = v)))),
         group('Paragraph', rfield('Leading em', num(s.par.leadingEm, (v) => (s.par.leadingEm = v), 0.05)), just),
         group('Header & footer',
           rfield('Header', txtInput(s.page.header ?? '', (v) => (s.page.header = v), 'optional', 130)),
@@ -607,6 +614,17 @@ function txtInput(value: string, on: (v: string) => void, placeholder = '', widt
   const i = el('input', { type: 'text', placeholder }) as HTMLInputElement;
   i.value = value; i.style.width = `${width}px`;
   i.oninput = () => { on(i.value); schedulePreview(); };
+  return i;
+}
+let fontDatalist: HTMLDataListElement | null = null;
+function fontInput(value: string, on: (v: string) => void): HTMLInputElement {
+  if (!fontDatalist) {
+    fontDatalist = el('datalist', { id: 'font-suggestions' }) as HTMLDataListElement;
+    for (const f of FONT_SUGGESTIONS) fontDatalist.append(el('option', { value: f }));
+    document.body.appendChild(fontDatalist);
+  }
+  const i = txtInput(value, on, 'Typst default', 130);
+  i.setAttribute('list', 'font-suggestions');
   return i;
 }
 function num(value: number, on: (v: number) => void, step = 0.5): HTMLInputElement {

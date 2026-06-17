@@ -4,9 +4,10 @@
 
 import type { Node as PMNode, Mark } from '@tiptap/pm/model';
 
-/** Escape text for Typst MARKUP mode so it renders literally. */
+/** Escape text for Typst MARKUP mode so it renders literally. Brackets are
+ *  escaped too so text never closes a surrounding content block ([...]). */
 export function escapeMarkup(s: string): string {
-  return s.replace(/([\\#$*_`<>@~])/g, '\\$1');
+  return s.replace(/([\\#$*_`<>@~[\]])/g, '\\$1');
 }
 
 function quote(s: string): string {
@@ -27,9 +28,10 @@ function typstColor(v: string): string {
 
 /** Apply inline marks to a single text run. */
 function applyMarks(text: string, marks: readonly Mark[]): string {
-  // `code` is verbatim (raw) — don't escape, don't add other markup.
+  // `code` is verbatim (raw). Use backtick raw, but fall back to #raw() with a
+  // quoted string when the text itself contains a backtick.
   if (marks.some((m) => m.type.name === 'code')) {
-    return '`' + text + '`';
+    return text.includes('`') ? `#raw(${quote(text)})` : '`' + text + '`';
   }
   let t = escapeMarkup(text);
   let href: string | null = null;
