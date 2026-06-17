@@ -61,6 +61,8 @@ select, input[type=text], input[type=number], textarea {
 
 .rfield { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #6b7280; }
 .rfield input, .rfield select { font-size: 13px; }
+.color-btn { position: relative; }
+.color-hidden { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
 
 /* ---- layout ---- */
 .main { display: flex; flex: 1; min-height: 0; position: relative; }
@@ -92,6 +94,7 @@ select, input[type=text], input[type=number], textarea {
 .page li > p { margin: 0; }
 .page a { color: #2f6fed; text-decoration: underline; }
 .page strong { font-weight: 700; }
+.page mark { background: #fde68a; border-radius: 2px; padding: 0 1px; color: inherit; }
 .page blockquote { margin: 0 0 .8em; padding-left: 14px; border-left: 3px solid #cdd2dc; color: #4b5563; }
 .page hr { border: none; border-top: 1px solid #cdd2dc; margin: 1.2em 0; }
 .page [data-callout] { margin: 0 0 .9em; padding: 10px 14px; border-radius: 4px; background: #eef2ff; border: .5px solid #6366f1; }

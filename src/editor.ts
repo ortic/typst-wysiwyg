@@ -17,6 +17,9 @@ import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import Image from '@tiptap/extension-image';
+import TextStyle from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
 import { createMathNodeView } from './mathview';
 import { createMathInlineView } from './mathinlineview';
 import { createFootnoteView } from './footnoteview';
@@ -193,6 +196,9 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
         // codeBlock is kept and reused as the raw-Typst block.
       }),
       Link.configure({ openOnClick: false, autolink: true }),
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
       StyledTable.configure({ resizable: true }),
       TableRow,
       TableHeader,

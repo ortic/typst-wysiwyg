@@ -13,6 +13,18 @@ function quote(s: string): string {
   return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
+/** A CSS color (hex or rgb()) -> a Typst color expression. */
+function typstColor(v: string): string {
+  const t = v.trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(t)) return `rgb("${t}")`;
+  const m = t.match(/rgba?\(([^)]+)\)/i);
+  if (m) {
+    const [r, g, b] = m[1].split(',').map((s) => Math.round(parseFloat(s.trim())));
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  return `rgb("${t}")`;
+}
+
 /** Apply inline marks to a single text run. */
 function applyMarks(text: string, marks: readonly Mark[]): string {
   // `code` is verbatim (raw) — don't escape, don't add other markup.
@@ -21,14 +33,21 @@ function applyMarks(text: string, marks: readonly Mark[]): string {
   }
   let t = escapeMarkup(text);
   let href: string | null = null;
+  let color: string | null = null;
+  let highlight: string | null = null;
+  let highlighted = false;
   for (const m of marks) {
     switch (m.type.name) {
       case 'bold': t = `*${t}*`; break;
       case 'italic': t = `_${t}_`; break;
       case 'strike': t = `#strike[${t}]`; break;
+      case 'textStyle': if (m.attrs.color) color = m.attrs.color as string; break;
+      case 'highlight': highlighted = true; highlight = (m.attrs.color as string) ?? null; break;
       case 'link': href = (m.attrs.href as string) ?? null; break;
     }
   }
+  if (color) t = `#text(fill: ${typstColor(color)})[${t}]`;
+  if (highlighted) t = highlight ? `#highlight(fill: ${typstColor(highlight)})[${t}]` : `#highlight[${t}]`;
   if (href) t = `#link(${quote(href)})[${t}]`;
   return t;
 }

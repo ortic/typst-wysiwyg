@@ -262,6 +262,8 @@ function rbtn(icon: string, label: string, onClick: () => void, active = false):
   if (icon.startsWith('<svg')) ico.innerHTML = icon;
   else ico.textContent = icon;
   const b = el('button', { class: 'rbtn' + (active ? ' active' : '') }, ico, el('span', {}, label));
+  // Don't steal focus from the editor, so commands apply to the current selection.
+  b.addEventListener('mousedown', (e) => e.preventDefault());
   b.onclick = onClick;
   return b;
 }
@@ -275,6 +277,22 @@ const SAVE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" s
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
 function rfield(label: string, control: Node): HTMLElement {
   return el('label', { class: 'rfield' }, el('span', {}, label), control);
+}
+
+const HIGHLIGHT_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-3 3v3h3l3-3"/><path d="M13 10l4-4a2 2 0 0 1 3 3l-4 4z"/><path d="M9 14l5-5 1 1-5 5z" fill="currentColor"/></svg>';
+
+/** Text-colour control: an "A" whose underline shows the colour; opens a picker. */
+function colorControl(): HTMLElement {
+  const current = (editor.getAttributes('textStyle').color as string) || '#1e2330';
+  const wrap = el('label', { class: 'rbtn color-btn', title: 'Text color' });
+  const ico = el('span', { class: 'ico' }, 'A');
+  ico.style.borderBottom = `3px solid ${current}`;
+  ico.style.lineHeight = '15px';
+  const input = el('input', { type: 'color', class: 'color-hidden' }) as HTMLInputElement;
+  input.value = current;
+  input.oninput = () => { editor.chain().focus().setColor(input.value).run(); renderRibbon(); schedulePreview(); };
+  wrap.append(ico, el('span', {}, 'Color'), input);
+  return wrap;
 }
 
 function ribbonGroups(): Node[] {
@@ -303,6 +321,8 @@ function ribbonGroups(): Node[] {
           rbtn('I', 'Italic', () => cmd((c) => c.toggleItalic()), a.isActive('italic')),
           rbtn('S', 'Strike', () => cmd((c) => c.toggleStrike()), a.isActive('strike')),
           rbtn(LINK_ICON, 'Link', setLink, a.isActive('link')),
+          colorControl(),
+          rbtn(HIGHLIGHT_ICON, 'Highlight', () => cmd((c) => c.toggleHighlight()), a.isActive('highlight')),
         ),
         group('Lists',
           rbtn('•', 'Bullets', () => cmd((c) => c.toggleBulletList()), a.isActive('bulletList')),
