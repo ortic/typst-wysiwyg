@@ -104,7 +104,9 @@ The first load fetches a ~28 MB WASM compiler; give it a moment on a cold start.
 
 The same frontend is packaged as a native desktop app with [Tauri](https://tauri.app)
 (`src-tauri/`). The Typst compiler still runs in the embedded webview's WASM — there is
-no separate backend.
+no separate backend. The desktop build adds a couple of things the browser can't:
+**native Open/Save/Export dialogs** writing straight to disk, and it hides the in-app
+title since the OS window already shows it.
 
 Prerequisites: the [Rust toolchain](https://www.rust-lang.org/tools/install) and your
 platform's Tauri system dependencies (on Linux, WebKitGTK — see the

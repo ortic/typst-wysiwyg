@@ -10,6 +10,7 @@ import { createEditor } from './editor';
 import { installBlockHandle } from './blockhandle';
 import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
+import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
 
 // The "/" command menu — insert any block by typing. `pickImage` is referenced
 // before its declaration but only called at runtime, so the hoist is fine.
@@ -184,11 +185,13 @@ function renderRibbon(): void {
     btn.onclick = () => { activeTab = t.id; renderRibbon(); };
     tabStrip.append(btn);
   }
-  tabStrip.append(
-    el('span', { class: 'tab-spacer' }),
-    el('span', { class: 'save-status' }, ''),
-    el('span', { class: 'brand' }, el('span', { class: 'app' }, 'Typst WYSIWYG'), el('span', { class: 'muted' }, 'spike')),
-  );
+  tabStrip.append(el('span', { class: 'tab-spacer' }), el('span', { class: 'save-status' }, ''));
+  // The desktop window already shows the app name in its native title bar.
+  if (!isDesktop()) {
+    tabStrip.append(
+      el('span', { class: 'brand' }, el('span', { class: 'app' }, 'Typst WYSIWYG'), el('span', { class: 'muted' }, 'spike')),
+    );
+  }
   ribbonBody.replaceChildren(...ribbonGroups());
 }
 
@@ -219,7 +222,12 @@ function ribbonGroups(): Node[] {
   switch (activeTab) {
     case 'home':
       return [
-        group('Templates', rbtn('✚', 'New', openTemplateModal)),
+        group('File',
+          rbtn('✚', 'New', openTemplateModal),
+          rbtn(OPEN_ICON, 'Open', openFromFile),
+          rbtn(SAVE_ICON, 'Save', saveToFile),
+        ),
+        group('Export', rbtn('⤓', '.typ', exportTyp), rbtn('⬇', 'PDF', exportPdf)),
         group('History',
           rbtn('↶', 'Undo', () => cmd((c) => c.undo())),
           rbtn('↷', 'Redo', () => cmd((c) => c.redo())),
@@ -244,8 +252,6 @@ function ribbonGroups(): Node[] {
           rbtn('❝', 'Callout', () => cmd((c) => c.toggleWrap('callout')), a.isActive('callout')),
           rbtn('</>', 'Raw', () => cmd((c) => c.toggleCodeBlock()), a.isActive('codeBlock')),
         ),
-        group('File', rbtn(OPEN_ICON, 'Open', openFromFile), rbtn(SAVE_ICON, 'Save', saveToFile)),
-        group('Export', rbtn('⤓', '.typ', exportTyp), rbtn('⬇', 'PDF', exportPdf)),
       ];
     case 'layout': {
       const s = logic.style;
@@ -366,11 +372,22 @@ function togglePreview(): void {
   renderRibbon();
   if (previewVisible) { previewPane.replaceChildren(el('div', { class: 'loading' }, 'Rendering…')); refreshPreview(); }
 }
-function exportTyp(): void { download('document.typ', new Blob([generate(logic, editor.state.doc)], { type: 'text/plain' })); }
+async function exportTyp(): Promise<void> {
+  const source = generate(logic, editor.state.doc);
+  if (isDesktop()) {
+    await saveTextDialog('document.typ', [{ name: 'Typst', extensions: ['typ'] }], source);
+  } else {
+    download('document.typ', new Blob([source], { type: 'text/plain' }));
+  }
+}
 async function exportPdf(): Promise<void> {
   try {
     const bytes = await renderPdf(generate(logic, editor.state.doc));
-    download('document.pdf', new Blob([bytes as BlobPart], { type: 'application/pdf' }));
+    if (isDesktop()) {
+      await saveBytesDialog('document.pdf', [{ name: 'PDF', extensions: ['pdf'] }], bytes);
+    } else {
+      download('document.pdf', new Blob([bytes as BlobPart], { type: 'application/pdf' }));
+    }
   } catch (e) { alert('PDF export failed:\n' + String(e)); }
 }
 function download(name: string, blob: Blob): void {
@@ -431,15 +448,29 @@ function applyDoc(data: SavedDoc): void {
   schedulePreview();
 }
 
-function saveToFile(): void {
-  download('document.typwys', new Blob([JSON.stringify(currentDoc())], { type: 'application/json' }));
-  flashSaved();
+const DOC_FILTERS = [{ name: 'Typst WYSIWYG', extensions: ['typwys'] }, { name: 'JSON', extensions: ['json'] }];
+
+async function saveToFile(): Promise<void> {
+  const json = JSON.stringify(currentDoc());
+  if (isDesktop()) {
+    if (await saveTextDialog('document.typwys', DOC_FILTERS, json)) flashSaved();
+  } else {
+    download('document.typwys', new Blob([json], { type: 'application/json' }));
+    flashSaved();
+  }
 }
 
 const docInput = el('input', { type: 'file', accept: '.typwys,.json,application/json' }) as HTMLInputElement;
 docInput.style.display = 'none';
 document.body.appendChild(docInput);
-function openFromFile(): void {
+async function openFromFile(): Promise<void> {
+  if (isDesktop()) {
+    try {
+      const text = await openTextDialog(DOC_FILTERS);
+      if (text != null) applyDoc(JSON.parse(text) as SavedDoc);
+    } catch (e) { alert('Could not open file:\n' + String(e)); }
+    return;
+  }
   docInput.value = '';
   docInput.onchange = async () => {
     const file = docInput.files?.[0];
