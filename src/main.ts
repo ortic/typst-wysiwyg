@@ -799,8 +799,8 @@ function showRow(r: ShowRule, redraw: () => void): HTMLElement {
   const box = el('div', { class: 'def' });
 
   const target = el('select', {}) as HTMLSelectElement;
-  for (const t of ['heading', 'strong', 'emph', 'link', 'raw'] as ShowTarget[]) {
-    const o = el('option', { value: t }, t);
+  for (const t of ['heading', 'strong', 'emph', 'link', 'raw', 'custom'] as ShowTarget[]) {
+    const o = el('option', { value: t }, t === 'custom' ? 'custom…' : t);
     if (r.target === t) o.selected = true;
     target.append(o);
   }
@@ -809,11 +809,24 @@ function showRow(r: ShowRule, redraw: () => void): HTMLElement {
   const del = el('button', { title: 'Delete' }, '✕');
   del.onclick = () => { logic.shows = logic.shows.filter((x) => x !== r); redraw(); schedulePreview(); };
 
+  const kind = el('select', { title: 'How to restyle' }) as HTMLSelectElement;
+  for (const [v, lab] of [['style', 'set style'], ['function', 'function']] as const) {
+    const o = el('option', { value: v }, lab);
+    if ((r.kind ?? 'style') === v) o.selected = true;
+    kind.append(o);
+  }
+  kind.onchange = () => { r.kind = kind.value as ShowRule['kind']; redraw(); schedulePreview(); };
+
   const head = el('div', { class: 'bhead' },
     el('span', { class: 'when' }, 'When'),
     target,
   );
-  if (r.target === 'heading') {
+  if (r.target === 'custom') {
+    const sel = el('input', { type: 'text', placeholder: 'selector, e.g. heading.where(level: 2)' }) as HTMLInputElement;
+    sel.value = r.customSelector ?? ''; sel.style.width = '230px';
+    sel.oninput = () => { r.customSelector = sel.value; schedulePreview(); };
+    head.append(sel);
+  } else if (r.target === 'heading') {
     const level = el('select', {}) as HTMLSelectElement;
     for (const [v, lab] of [['', 'any level'], ['1', 'level 1'], ['2', 'level 2'], ['3', 'level 3']] as const) {
       const o = el('option', { value: v }, lab);
@@ -823,8 +836,18 @@ function showRow(r: ShowRule, redraw: () => void): HTMLElement {
     level.onchange = () => { r.level = level.value ? Number(level.value) : null; schedulePreview(); };
     head.append(level);
   }
-  head.append(el('span', { class: 'spacer' }), del);
+  head.append(el('span', { class: 'spacer' }), kind, del);
   box.append(head);
+
+  // Function-style: a raw Typst body that receives `it`.
+  if (r.kind === 'function') {
+    const body = el('textarea', { rows: '3' }) as HTMLTextAreaElement;
+    body.placeholder = 'Typst, receives `it`. e.g. block(fill: luma(240), inset: 6pt, it)';
+    body.value = r.body ?? '';
+    body.oninput = () => { r.body = body.value; schedulePreview(); };
+    box.append(body);
+    return box;
+  }
 
   // properties
   const props = el('div', { class: 'show-props' });

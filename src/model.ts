@@ -36,12 +36,15 @@ export interface LetBinding {
  * A structured #show rule: "when <target> [matches], set these text props".
  * Emits e.g. `#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"))`.
  */
-export type ShowTarget = 'heading' | 'strong' | 'emph' | 'link' | 'raw';
+export type ShowTarget = 'heading' | 'strong' | 'emph' | 'link' | 'raw' | 'custom';
 
 export interface ShowRule {
   id: string;
   target: ShowTarget;
+  customSelector?: string; // raw Typst selector when target === 'custom'
   level: number | null; // only meaningful for heading; null = all levels
+  kind?: 'style' | 'function'; // default 'style'
+  body?: string; // Typst function body (receives `it`) when kind === 'function'
   props: {
     fill: string;       // '' or hex like #1c7ed6
     sizePt: number | null;

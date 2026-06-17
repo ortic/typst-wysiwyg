@@ -43,8 +43,15 @@ function genLet(b: LetBinding): string {
 }
 
 function genShow(s: ShowRule): string {
-  let selector = s.target as string;
-  if (s.target === 'heading' && s.level != null) selector = `heading.where(level: ${s.level})`;
+  let selector: string;
+  if (s.target === 'custom') selector = (s.customSelector ?? '').trim() || 'heading';
+  else if (s.target === 'heading' && s.level != null) selector = `heading.where(level: ${s.level})`;
+  else selector = s.target;
+
+  if (s.kind === 'function') {
+    const body = (s.body ?? '').trim() || 'it';
+    return `#show ${selector}: it => {\n${body.split('\n').map((l) => (l.length ? '  ' + l : l)).join('\n')}\n}`;
+  }
 
   const props: string[] = [];
   if (s.props.fill.trim()) props.push(`fill: ${color(s.props.fill)}`);
