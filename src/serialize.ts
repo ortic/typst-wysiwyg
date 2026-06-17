@@ -100,9 +100,10 @@ function serializeBlock(node: PMNode): string {
 }
 
 /** A table cell's content as a Typst `[...]` (or `table.cell(..)[...]`) argument. */
-function serializeCell(cell: PMNode): string {
+function serializeCell(cell: PMNode, bold = false): string {
   const blocks = childrenBlocks(cell);
-  const content = blocks.length === 1 ? blocks[0] : blocks.join('\n\n');
+  let content = blocks.length === 1 ? blocks[0] : blocks.join('\n\n');
+  if (bold && content.trim()) content = `*${content}*`; // match the editor's bold header
   const colspan = (cell.attrs.colspan as number) ?? 1;
   const rowspan = (cell.attrs.rowspan as number) ?? 1;
   if (colspan > 1 || rowspan > 1) {
@@ -132,23 +133,38 @@ function tableColumns(firstRow: PMNode): string {
   return `(${spec.join(', ')})`;
 }
 
+function isHeaderRow(row: PMNode): boolean {
+  if (row.childCount === 0) return false;
+  let all = true;
+  row.forEach((cell) => { if (cell.type.name !== 'tableHeader') all = false; });
+  return all;
+}
+
 function serializeTable(node: PMNode): string {
   const rows: PMNode[] = [];
   node.forEach((r) => rows.push(r));
   if (!rows.length) return '#table()';
 
-  const lines: string[] = [`#table(`, `  columns: ${tableColumns(rows[0])},`];
-  for (const row of rows) {
+  const headerFirst = isHeaderRow(rows[0]);
+
+  // Styling chosen to match the editor: light-gray borders, the same cell
+  // padding, and a gray fill behind a bold header row.
+  const lines: string[] = [
+    `#table(`,
+    `  columns: ${tableColumns(rows[0])},`,
+    `  stroke: 0.5pt + rgb("#cdd2dc"),`,
+    `  inset: (x: 8pt, y: 5pt),`,
+  ];
+  if (headerFirst) lines.push(`  fill: (col, row) => if row == 0 { rgb("#f3f4f7") },`);
+
+  rows.forEach((row, ri) => {
+    const header = isHeaderRow(row);
     const cells: string[] = [];
-    let allHeader = row.childCount > 0;
-    row.forEach((cell) => {
-      if (cell.type.name !== 'tableHeader') allHeader = false;
-      cells.push(serializeCell(cell));
-    });
-    // A full header row uses Typst's `table.header(...)` for proper semantics.
-    if (allHeader) lines.push(`  table.header(${cells.join(', ')}),`);
+    row.forEach((cell) => cells.push(serializeCell(cell, header)));
+    // The first header row uses Typst's `table.header(...)` for proper semantics.
+    if (header && ri === 0) lines.push(`  table.header(${cells.join(', ')}),`);
     else lines.push(`  ${cells.join(', ')},`);
-  }
+  });
   lines.push(`)`);
   return lines.join('\n');
 }
