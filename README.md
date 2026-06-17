@@ -58,6 +58,8 @@ an icon.
   to the Typst compiler's virtual filesystem) and serializes to `#image(...)`.
 - **Equations** — a block equation with a live-rendered (Typst-compiled) preview above an
   editable source field; serializes to `$ … $`.
+- **Page breaks** (`#pagebreak()`) and **footnotes** (inline marker + popover editor →
+  `#footnote[…]`).
 - **Block handle** (⠿) for changing block type, moving, inserting and deleting.
 - **Context-sensitive ribbon tabs** (Word-style): selecting an image shows an **Image**
   tab (width, border); working in a table shows a **Table** tab (rows/columns, header,
@@ -115,10 +117,11 @@ Roughly in priority order. The first group is the most-requested missing content
   wrapper (caption + label) → `#figure(image("..."), caption: [...])`.
 - ✅ **Equations** — done (block math with a live-rendered field, `$ … $`). Still to add:
   **inline** math within a paragraph.
-- **Footnotes, references and citations** — `#footnote[...]`, labels + cross-references
+- ✅ **Footnotes** — done (`#footnote[...]`). Still to add: labels + cross-references
   (`<label>` / `@ref`), and `#cite` / `#bibliography`.
-- **Page breaks, columns and code listings** — `#pagebreak()`, multi-column layout, and
-  a real (display) code block distinct from the raw-Typst escape hatch.
+- **Page breaks, columns and code listings** — ✅ page break (`#pagebreak()`) done; still
+  to add multi-column layout and a real (display) code block distinct from the raw-Typst
+  escape hatch.
 
 ### Editing experience
 

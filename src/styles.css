@@ -107,6 +107,23 @@ select, input[type=text], input[type=number], textarea {
 .page table[data-borders="none"] td, .page table[data-borders="none"] th { border: none; }
 .page table[data-borders="horizontal"] td, .page table[data-borders="horizontal"] th { border-left: none; border-right: none; }
 
+/* footnote */
+.footnote-marker {
+  color: #4f46e5; cursor: pointer; font-weight: 700; font-size: .72em;
+  vertical-align: super; line-height: 0; padding: 0 1px; user-select: none;
+}
+.footnote-marker:hover { text-decoration: underline; }
+.footnote-marker.sel { background: #e6e8ff; border-radius: 2px; }
+.footnote-pop {
+  position: fixed; z-index: 60; background: #fff; border: 1px solid #d3d7df; border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 10px; width: 290px;
+}
+.footnote-pop-label { font: 11px/1 system-ui; text-transform: uppercase; letter-spacing: .06em; color: #9aa0ab; margin-bottom: 6px; }
+.footnote-pop textarea {
+  width: 100%; border: 1px solid #cbd0da; border-radius: 5px; padding: 7px;
+  font: 13px/1.4 system-ui; resize: vertical; outline: none;
+}
+
 /* page break */
 .doc-pagebreak {
   position: relative; height: 0; margin: 20px 0; border-top: 2px dashed #c2c7d0;

@@ -18,6 +18,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import Image from '@tiptap/extension-image';
 import { createMathNodeView } from './mathview';
+import { createFootnoteView } from './footnoteview';
 
 // Image node carries an extra `path` attribute: the Typst VFS path whose bytes
 // live in assets.ts. The `src` (a data URL) is only for display in the editor.
@@ -91,6 +92,32 @@ export const MathBlock = Node.create({
   },
 });
 
+export const Footnote = Node.create({
+  name: 'footnote',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      content: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-content') ?? '',
+        renderHTML: (attrs) => ({ 'data-content': attrs.content }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'sup[data-footnote]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['sup', mergeAttributes(HTMLAttributes, { 'data-footnote': '', class: 'footnote-marker' }), '*'];
+  },
+  addNodeView() {
+    return (props) => createFootnoteView(props as never);
+  },
+});
+
 export const PageBreak = Node.create({
   name: 'pageBreak',
   group: 'block',
@@ -138,6 +165,7 @@ export function createEditor(element: HTMLElement, content: Content, hooks: Edit
       TypstImage.configure({ allowBase64: true }),
       MathBlock,
       PageBreak,
+      Footnote,
       Placeholder.configure({
         // Only the top-level empty block gets a hint — not every empty cell.
         includeChildren: false,
