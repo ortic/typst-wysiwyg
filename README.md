@@ -100,6 +100,28 @@ npm run build    # typecheck + production build
 
 The first load fetches a ~28 MB WASM compiler; give it a moment on a cold start.
 
+## Desktop app (Tauri showcase)
+
+The same frontend is packaged as a native desktop app with [Tauri](https://tauri.app)
+(`src-tauri/`). The Typst compiler still runs in the embedded webview's WASM — there is
+no separate backend.
+
+Prerequisites: the [Rust toolchain](https://www.rust-lang.org/tools/install) and your
+platform's Tauri system dependencies (on Linux, WebKitGTK — see the
+[Tauri prerequisites](https://tauri.app/start/prerequisites/)).
+
+```bash
+npm install
+npm run tauri:dev      # run the desktop app against the dev server
+npm run tauri:build    # produce a native installer in src-tauri/target/release/bundle
+```
+
+The Vite `base` switches automatically: `/typst-wysiwyg/` for the GitHub Pages demo,
+relative (`./`) for the Tauri bundle (`--mode tauri`), and `/` for `npm run dev`.
+
+> The repo ships the Tauri scaffold (config, Rust entrypoint, capabilities, icons); a
+> binary is produced by `tauri:build` on a machine with the Rust + webview prerequisites.
+
 ## Source map
 
 | File | Role |
@@ -149,7 +171,8 @@ Roughly in priority order. The first group is the most-requested missing content
 - **Import of existing `.typ`** — the model is generated one-way today; import needs a
   parser and will be tightly scoped.
 - **User templates** — save the current document as a reusable template.
-- **Desktop packaging** via a **Tauri** shell (local fonts, file system, offline).
+- ✅ **Desktop packaging** via a **Tauri** shell — scaffold done (`src-tauri/`); build a
+  binary with `npm run tauri:build`. Still to wire: native file dialogs, local fonts.
 
 ### Engineering / hardening
 
