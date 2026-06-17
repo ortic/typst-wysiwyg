@@ -14,6 +14,7 @@ import type { SlashItem } from './slash';
 import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
 import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
 import { STATE_MARKER, extractEmbeddedState, importTypst } from './typimport';
+import { pageConfig, relayoutPages } from './pagination';
 
 // The "/" command menu — insert any block by typing. `pickImage` is referenced
 // before its declaration but only called at runtime, so the hoist is fine.
@@ -152,7 +153,7 @@ function mountEditor(content: object): void {
   installBlockHandle(editor, pageEl);
   installBubbleMenu(editor, setLink);
   installImageDropPaste(pageEl);
-  syncJustify(); syncColumns();
+  syncJustify(); syncColumns(); syncPageGeometry();
 }
 
 function syncJustify(): void {
@@ -164,6 +165,16 @@ function syncColumns(): void {
   pageEl.classList.remove('cols-2', 'cols-3');
   if (n === 2) pageEl.classList.add('cols-2');
   else if (n >= 3) pageEl.classList.add('cols-3');
+}
+
+// Sheet height for the editor pages + page-break geometry, tracking the paper.
+const PAPER_RATIO: Record<string, number> = { a4: 297 / 210, 'us-letter': 11 / 8.5, a5: 210 / 148 };
+function syncPageGeometry(): void {
+  const r = PAPER_RATIO[logic.style.page.paper] ?? 297 / 210;
+  pageConfig.pageH = Math.round(660 * r);
+  pageEl.style.setProperty('--page-h', `${pageConfig.pageH}px`);
+  pageEl.style.setProperty('--page-gutter', `${pageConfig.gutter}px`);
+  if (editor) relayoutPages(editor.view);
 }
 
 function cmd(run: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>): void {
@@ -377,7 +388,7 @@ function ribbonGroups(): Node[] {
         if (s.page.paper === p) o.selected = true;
         paper.append(o);
       }
-      paper.onchange = () => { s.page.paper = paper.value as DocLogic['style']['page']['paper']; schedulePreview(); };
+      paper.onchange = () => { s.page.paper = paper.value as DocLogic['style']['page']['paper']; syncPageGeometry(); schedulePreview(); };
       const just = rbtn(s.par.justify ? '☰' : '≡', 'Justify', () => {
         s.par.justify = !s.par.justify; syncJustify(); renderRibbon(); schedulePreview();
       }, s.par.justify);
@@ -610,7 +621,7 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  syncJustify(); syncColumns();
+  syncJustify(); syncColumns(); syncPageGeometry();
   renderRibbon();
   schedulePreview();
 }
@@ -754,7 +765,7 @@ function openTemplateModal(): void {
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
-        syncJustify(); syncColumns();
+        syncJustify(); syncColumns(); syncPageGeometry();
         closeModal();
         renderRibbon();
         schedulePreview();
