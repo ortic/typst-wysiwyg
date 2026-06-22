@@ -173,7 +173,10 @@ function serializeBlock(node: PMNode): string {
 function serializeCell(cell: PMNode, bold = false): string {
   const blocks = childrenBlocks(cell);
   let content = blocks.length === 1 ? blocks[0] : blocks.join('\n\n');
-  if (bold && content.trim()) content = `*${content}*`; // match the editor's bold header
+  // Header cells render bold (the editor bolds them too). #strong[…] is
+  // idempotent — re-import strips it — unlike wrapping in *…* which would
+  // double up on content that is already bold.
+  if (bold && content.trim()) content = `#strong[${content}]`;
   const colspan = (cell.attrs.colspan as number) ?? 1;
   const rowspan = (cell.attrs.rowspan as number) ?? 1;
   if (colspan > 1 || rowspan > 1) {

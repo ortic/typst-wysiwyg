@@ -303,6 +303,18 @@ See @fig:sun.`;
     expect(cycle(typ).typ).toBe(typ); // idempotent
   });
 
+  it('round-trips a table header without double-bolding', () => {
+    const src = `#table(
+  columns: 2,
+  table.header([Name], [Value]),
+  [a], [1],
+)`;
+    const first = cycle(src);
+    expect(first.typ).toContain('#strong[Name]');
+    expect(first.typ).not.toContain('**'); // no doubled bold markers
+    expect(cycle(first.typ).typ).toBe(first.typ); // idempotent
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

@@ -200,10 +200,19 @@ function parseTableInner(inner: string): object | null {
   if (!columns || !cells.length) return null;
   const rows: object[] = [];
   for (let r = 0; r < cells.length; r += columns) {
-    const rowCells = cells.slice(r, r + columns).map((c) => ({
-      type: c.header ? 'tableHeader' : 'tableCell',
-      content: [{ type: 'paragraph', content: parseInline(c.content.trim()) }],
-    }));
+    const rowCells = cells.slice(r, r + columns).map((c) => {
+      let txt = c.content.trim();
+      // A header cell's bold is implied by the header row; unwrap #strong[…]
+      // (our own output) so it doesn't accumulate a redundant bold mark.
+      if (c.header) {
+        const m = txt.match(/^#?strong\s*\[/);
+        if (m) txt = readBalancedFrom(txt, txt.indexOf('['), '[', ']').content.trim();
+      }
+      return {
+        type: c.header ? 'tableHeader' : 'tableCell',
+        content: [{ type: 'paragraph', content: parseInline(txt) }],
+      };
+    });
     if (rowCells.length) rows.push({ type: 'tableRow', content: rowCells });
   }
   return { type: 'table', attrs: { rawArgs: styleArgs.join(', ') }, content: rows };
