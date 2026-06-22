@@ -13,6 +13,8 @@ export interface DocStyle {
     marginCm: number;
     columns?: number;        // 1 = single column (default)
     headingNumbering?: boolean; // number headings (1, 1.1, …) — needed for @refs
+    headingNumberingFormat?: string; // raw #set heading numbering value, preserved
+    headingExtra?: string[]; // unmodeled #set heading args, kept verbatim
     numbering?: boolean;     // page numbers in the footer
     numberingFormat?: string; // raw numbering value (e.g. `"1 / 1"`), preserved from import
     header?: string;     // header text (markup)

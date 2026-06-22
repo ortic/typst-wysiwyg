@@ -34,7 +34,12 @@ function genStyle(style: DocStyle): string {
   const parArgs: string[] = [`leading: ${style.par.leadingEm}em`, `justify: ${style.par.justify}`];
   if (style.par.extra) parArgs.push(...style.par.extra);
   lines.push(`#set par(${parArgs.join(', ')})`);
-  if (style.page.headingNumbering) lines.push(`#set heading(numbering: "1.1")`);
+  if (style.page.headingNumbering || style.page.headingExtra) {
+    const headArgs: string[] = [];
+    if (style.page.headingNumbering) headArgs.push(`numbering: ${style.page.headingNumberingFormat ?? '"1.1"'}`);
+    if (style.page.headingExtra) headArgs.push(...style.page.headingExtra);
+    lines.push(`#set heading(${headArgs.join(', ')})`);
+  }
   return lines.join('\n');
 }
 

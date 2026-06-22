@@ -466,7 +466,16 @@ function parseStyle(text: string): DocLogic['style'] {
     if (extra.length) style.par.extra = extra;
   }
 
-  if (/#set heading\([^\n]*numbering:/.test(text)) style.page.headingNumbering = true;
+  const headFrags = setArgFragments(text, 'heading');
+  if (headFrags) {
+    const extra: string[] = [];
+    for (const f of headFrags) {
+      const k = argKey(f), v = argVal(f);
+      if (k === 'numbering') { style.page.headingNumbering = true; style.page.headingNumberingFormat = v; }
+      else extra.push(f);
+    }
+    if (extra.length) style.page.headingExtra = extra;
+  }
   return style;
 }
 

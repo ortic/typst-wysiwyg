@@ -233,6 +233,17 @@ Body.`;
     expect(cycle(first.typ).typ).toBe(first.typ);
   });
 
+  it('preserves a custom #set heading numbering and extra args', () => {
+    const src = `#set heading(numbering: "I.", supplement: [Section])
+
+= Title <t>
+See @t.`;
+    const first = cycle(src);
+    expect(first.typ).toContain('numbering: "I."');
+    expect(first.typ).toContain('supplement: [Section]');
+    expect(cycle(first.typ).typ).toBe(first.typ);
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');
