@@ -113,7 +113,7 @@ function buildInlineFn(name: string, args: string | null, content: string | null
     case 'underline': return parseInline(content ?? '');
     case 'footnote': return [{ type: 'footnote', attrs: { content: unescapeMarkup(content ?? '').trim() } }];
     case 'ref': case 'cite': {
-      const key = args?.match(/<([\w-]+)>/)?.[1] ?? args?.match(/"([\w-]+)"/)?.[1] ?? '';
+      const key = args?.match(/<([\w:.-]+)>/)?.[1] ?? args?.match(/"([\w:.-]+)"/)?.[1] ?? '';
       return key ? [{ type: 'reference', attrs: { target: key } }] : null;
     }
     case 'raw': {
@@ -143,7 +143,9 @@ function parseInline(s: string): PMInline[] {
     if (c === '_') { flush(); active.has('italic') ? active.delete('italic') : active.add('italic'); i++; continue; }
     if (c === '`') { const j = s.indexOf('`', i + 1); if (j > i) { flush(); out.push({ type: 'text', text: s.slice(i + 1, j), marks: [{ type: 'code' }] } as PMText); i = j + 1; continue; } }
     if (c === '$') { const j = s.indexOf('$', i + 1); if (j > i) { flush(); out.push({ type: 'mathInline', attrs: { src: s.slice(i + 1, j).trim() } }); i = j + 1; continue; } }
-    if (c === '@') { const m = s.slice(i).match(/^@([\w-]+)/); if (m) { flush(); out.push({ type: 'reference', attrs: { target: m[1] } }); i += m[0].length; continue; } }
+    // Typst label refs allow `:` `.` `-` mid-name (e.g. @fig:sun), but a name
+    // never ends on `.`/`:` — so a trailing sentence period stays prose.
+    if (c === '@') { const m = s.slice(i).match(/^@([\w-]+(?:[:.][\w-]+)*)/); if (m) { flush(); out.push({ type: 'reference', attrs: { target: m[1] } }); i += m[0].length; continue; } }
     if (c === '#') {
       const m = s.slice(i).match(/^#([a-zA-Z][a-zA-Z0-9_.]*)/);
       if (m) {
@@ -258,7 +260,7 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     if (h) {
       let text = h[2];
       let label: string | null = null;
-      const lm = text.match(/\s*<([\w-]+)>\s*$/);
+      const lm = text.match(/\s*<([\w:.-]+)>\s*$/);
       if (lm) { label = lm[1]; text = text.slice(0, lm.index); }
       blocks.push({ type: 'heading', attrs: { level: Math.min(h[1].length, 3), label }, content: parseInline(text) });
       i++;

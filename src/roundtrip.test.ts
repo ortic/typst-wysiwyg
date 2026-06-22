@@ -260,6 +260,32 @@ See @t.`;
     expect(cycle(first.typ).typ).toBe(first.typ); // idempotent
   });
 
+  it('parses and round-trips prefix:name labels and cross-references', () => {
+    const src = `#set heading(numbering: "1.1")
+= Methods <sec:methods>
+
+See @sec:methods and @eq:gamma.`;
+    const parsed = importTypst(src) as { logic: DocLogic; content: { content: { type: string; attrs?: Record<string, unknown>; content?: { type: string; text?: string }[] }[] } };
+    const heading = parsed.content.content.find((b) => b.type === 'heading')!;
+    expect(heading.attrs!.label).toBe('sec:methods');
+    expect((heading.content ?? []).map((c) => c.text).join('')).toBe('Methods');
+
+    type N = { type?: string; attrs?: Record<string, unknown>; content?: N[] };
+    const refs: string[] = [];
+    const walk = (n: N): void => {
+      if (n.type === 'reference') refs.push(n.attrs!.target as string);
+      (n.content ?? []).forEach(walk);
+    };
+    walk(parsed.content as N);
+    expect(refs).toEqual(['sec:methods', 'eq:gamma']); // colons kept, trailing period not
+
+    const typ = generate(parsed.logic, PMNode.fromJSON(schema, parsed.content));
+    expect(typ).toContain('= Methods <sec:methods>');
+    expect(typ).toContain('#ref(<sec:methods>)');
+    expect(typ).toContain('#ref(<eq:gamma>)');
+    expect(cycle(typ).typ).toBe(typ); // idempotent
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');
