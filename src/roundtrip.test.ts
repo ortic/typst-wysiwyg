@@ -111,6 +111,36 @@ describe('generated Typst', () => {
     });
   });
 
+  it('reads the code from a #raw call regardless of argument order', () => {
+    // The code is the positional string; a `lang:` value must not be mistaken for it.
+    const typ = '#raw(block: true, lang: "python", "return f\\"Hi {name}\\"")';
+    const back = importTypst(typ) as { content: { content: object[] } };
+    expect(back.content.content[0]).toMatchObject({
+      type: 'codeListing',
+      attrs: { language: 'python' },
+      content: [{ type: 'text', text: 'return f"Hi {name}"' }],
+    });
+  });
+
+  it('recovers code that spilled outside an empty #raw call', () => {
+    // A broken listing (empty raw string + an indented body) is re-absorbed,
+    // dedented, instead of leaving the code stranded in a paragraph.
+    const typ = '#raw("", block: true, lang: "python")\n\n    def greet(name):\n        return f"Hi {name}"';
+    const back = importTypst(typ) as { content: { content: object[] } };
+    expect(back.content.content).toHaveLength(1);
+    expect(back.content.content[0]).toMatchObject({
+      type: 'codeListing',
+      attrs: { language: 'python' },
+      content: [{ type: 'text', text: 'def greet(name):\n    return f"Hi {name}"' }],
+    });
+  });
+
+  it('does not absorb ordinary prose after an empty #raw call', () => {
+    const typ = '#raw("", block: true)\n\nThis is normal prose, not indented.';
+    const back = importTypst(typ) as { content: { content: { type: string }[] } };
+    expect(back.content.content.map((b) => b.type)).toEqual(['codeListing', 'paragraph']);
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

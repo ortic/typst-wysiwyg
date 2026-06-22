@@ -35,6 +35,14 @@ function unescapeTypstString(s: string): string {
   return s.replace(/\\(.)/g, (_, c) => (c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c));
 }
 
+/** Strip the common leading indentation from every line. */
+function dedent(s: string): string {
+  const lines = s.split('\n');
+  const indents = lines.filter((l) => l.trim()).map((l) => /^\s*/.exec(l)![0].length);
+  const min = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l) => l.slice(min)).join('\n');
+}
+
 // --- low-level helpers ------------------------------------------------------
 /** Read a balanced span within a string, given the index of the opening char. */
 function readBalancedFrom(s: string, start: number, open: string, close: string): { content: string; end: number } {
@@ -276,16 +284,31 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     // #raw("…", block: true, lang: "…") — our own code-listing form.
     if (t.startsWith('#raw(') && /block:\s*true/.test(lines.slice(i, i + 20).join('\n'))) {
       const { inner, next } = readBalancedLines(lines, i, '(', ')');
-      const strM = inner.match(/"((?:[^"\\]|\\.)*)"/);
+      // The code is the positional string argument; skip named args (e.g. lang:).
+      const codeArg = splitTopLevel(inner, ',').map((a) => a.trim()).find((a) => a.startsWith('"'));
+      const strM = codeArg?.match(/^"((?:[^"\\]|\\.)*)"/);
       if (strM) {
-        const code = unescapeTypstString(strM[1]);
+        let code = unescapeTypstString(strM[1]);
         const lang = inner.match(/lang:\s*"([^"]+)"/)?.[1] || 'text';
+        i = next;
+        // Recover code that spilled outside the call: an empty raw string
+        // followed by an indented block is really this listing's body.
+        if (!code) {
+          let j = i;
+          while (j < lines.length && lines[j].trim() === '') j++;
+          if (j < lines.length && /^\s+\S/.test(lines[j])) {
+            const body: string[] = [];
+            while (j < lines.length && (lines[j].trim() === '' || /^\s/.test(lines[j]))) body.push(lines[j++]);
+            while (body.length && body[body.length - 1].trim() === '') body.pop();
+            code = dedent(body.join('\n'));
+            i = j;
+          }
+        }
         blocks.push({
           type: 'codeListing',
           attrs: { language: lang },
           content: code ? [{ type: 'text', text: code }] : [],
         });
-        i = next;
         continue;
       }
     }
