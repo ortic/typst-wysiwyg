@@ -346,6 +346,27 @@ See @tab:d.`;
     expect(parsed.content.content[0].type).toBe('codeBlock');
   });
 
+  it('imports and round-trips nested lists', () => {
+    const src = `- a
+  - a1
+  - a2
+- b
+  + one
+  + two`;
+    const parsed = importTypst(src) as { logic: DocLogic; content: { content: { type: string; content?: unknown[] }[] } };
+    const list = parsed.content.content[0];
+    expect(list.type).toBe('bulletList');
+    // first item: paragraph "a" + a nested bulletList
+    const firstItem = (list.content![0] as { content: { type: string }[] });
+    expect(firstItem.content.map((c) => c.type)).toEqual(['paragraph', 'bulletList']);
+    // second item nests an ordered list
+    const secondItem = (list.content![1] as { content: { type: string }[] });
+    expect(secondItem.content.map((c) => c.type)).toEqual(['paragraph', 'orderedList']);
+    expect(cycle(src).typ).toBe(cycle(cycle(src).typ).typ); // idempotent
+    expect(cycle(src).typ).toContain('  - a1'); // nesting indentation preserved
+    expect(cycle(src).typ).toContain('  + one');
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

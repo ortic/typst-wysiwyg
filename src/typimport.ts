@@ -290,6 +290,31 @@ function parseCaption(text: string): string {
   return str ? unescapeTypstString(str[1]) : '';
 }
 
+interface ListEntry { indent: number; ordered: boolean; text: string }
+
+/** Build nested bullet/ordered lists from indented `- `/`+ ` lines. */
+function buildNestedList(entries: ListEntry[]): object {
+  const mkList = (ordered: boolean): { content: object[]; attrs?: object } =>
+    ordered ? { type: 'orderedList', attrs: { start: 1 }, content: [] } as never : { type: 'bulletList', content: [] } as never;
+  const root = mkList(entries[0].ordered);
+  const stack: { indent: number; list: { content: object[] }; lastItem: { content: object[] } | null }[] =
+    [{ indent: entries[0].indent, list: root, lastItem: null }];
+  for (const e of entries) {
+    while (stack.length > 1 && e.indent < stack[stack.length - 1].indent) stack.pop();
+    let frame = stack[stack.length - 1];
+    if (e.indent > frame.indent && frame.lastItem) { // deeper → nest under the previous item
+      const nested = mkList(e.ordered);
+      frame.lastItem.content.push(nested);
+      frame = { indent: e.indent, list: nested, lastItem: null };
+      stack.push(frame);
+    }
+    const item = { type: 'listItem', content: [{ type: 'paragraph', content: parseInline(e.text) }] as object[] };
+    frame.list.content.push(item);
+    frame.lastItem = item;
+  }
+  return root;
+}
+
 function parseContent(text: string): { type: 'doc'; content: object[] } {
   const lines = text.split('\n');
   const blocks: object[] = [];
@@ -310,14 +335,13 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     }
 
     if (/^[-+]\s+/.test(t)) {
-      const ordered = t[0] === '+';
-      const items: object[] = [];
+      const entries: ListEntry[] = [];
       while (i < lines.length && /^\s*[-+]\s+/.test(lines[i])) {
-        const m = lines[i].match(/^\s*[-+]\s+(.*)$/)!;
-        items.push({ type: 'listItem', content: [{ type: 'paragraph', content: parseInline(m[1]) }] });
+        const m = lines[i].match(/^(\s*)([-+])\s+(.*)$/)!;
+        entries.push({ indent: m[1].length, ordered: m[2] === '+', text: m[3] });
         i++;
       }
-      blocks.push(ordered ? { type: 'orderedList', attrs: { start: 1 }, content: items } : { type: 'bulletList', content: items });
+      blocks.push(buildNestedList(entries));
       continue;
     }
 
