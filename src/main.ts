@@ -46,14 +46,14 @@ let logic: DocLogic = initial.logic;
 const PREVIEW_KEY = 'typst-wysiwyg:preview';
 let previewVisible = ((): boolean => { try { return localStorage.getItem(PREVIEW_KEY) !== '0'; } catch { return true; } })();
 
-// Zoom: a percentage applied (via CSS `zoom`) to the editor page, the preview,
-// or both — the target is the user's choice. All persisted across sessions.
-type ZoomTarget = 'preview' | 'editor' | 'both';
-const ZOOM_KEY = 'typst-wysiwyg:zoom';
-const ZOOM_TARGET_KEY = 'typst-wysiwyg:zoomTarget';
+// Zoom: independent percentages (via CSS `zoom`) for the editor page and the
+// preview. Each ribbon button opens a numeric dropdown. Persisted per session.
+const ZOOM_EDITOR_KEY = 'typst-wysiwyg:zoomEditorPct';
+const ZOOM_PREVIEW_KEY = 'typst-wysiwyg:zoomPreviewPct';
 const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
-let zoomPct = ((): number => { const n = parseInt(localStorage.getItem(ZOOM_KEY) || '', 10); return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; })();
-let zoomTarget = ((): ZoomTarget => { const v = localStorage.getItem(ZOOM_TARGET_KEY); return v === 'editor' || v === 'both' ? v : 'preview'; })();
+const loadZoomPct = (k: string): number => { const n = parseInt(localStorage.getItem(k) || '', 10); return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; };
+let editorZoomPct = loadZoomPct(ZOOM_EDITOR_KEY);
+let previewZoomPct = loadZoomPct(ZOOM_PREVIEW_KEY);
 type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code';
 let activeTab: TabId = 'home';
 let editor!: Editor;
@@ -643,12 +643,7 @@ function ribbonGroups(): Node[] {
           rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible),
           rbtn('☰', 'Outline', toggleOutline, outlineVisible),
         ),
-        group('Zoom',
-          rbtn('−', 'Zoom out', () => setZoomPct(zoomPct - ZOOM_STEP)),
-          zoomReadout(),
-          rbtn('+', 'Zoom in', () => setZoomPct(zoomPct + ZOOM_STEP)),
-          rbtn(zoomTarget === 'editor' ? '✎' : zoomTarget === 'both' ? '◫' : '▦', zoomTargetLabel(), cycleZoomTarget),
-        ),
+        group('Zoom', zoomBtn('editor', '✎'), zoomBtn('preview', '▤')),
         group('Find', rbtn(SEARCH_ICON, 'Find & replace', openFindBar)),
         group('Source', rbtn('</>', 'Typst source', openSourceModal)),
       ];
@@ -801,35 +796,64 @@ function togglePreview(): void {
   if (previewVisible) { previewPane.replaceChildren(el('div', { class: 'loading' }, 'Rendering…')); refreshPreview(); }
 }
 
-// --- Zoom (editor page / preview / both) -----------------------------------
-function zoomFactor(which: 'editor' | 'preview'): string {
-  return String(zoomTarget === which || zoomTarget === 'both' ? zoomPct / 100 : 1);
-}
+// --- Zoom: a numeric dropdown per surface (editor / preview) ----------------
+type ZoomWhich = 'editor' | 'preview';
+const zoomLabel = (w: ZoomWhich): string => (w === 'editor' ? 'Editor' : 'Preview');
+const currentZoom = (w: ZoomWhich): number => (w === 'editor' ? editorZoomPct : previewZoomPct);
 function applyZoom(): void {
-  pageEl.style.zoom = zoomFactor('editor');
+  pageEl.style.zoom = String(editorZoomPct / 100);
   const child = previewPane.firstElementChild as HTMLElement | null;
-  if (child) child.style.zoom = zoomFactor('preview');
+  if (child) child.style.zoom = String(previewZoomPct / 100);
 }
-function setZoomPct(pct: number): void {
-  zoomPct = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(pct / ZOOM_STEP) * ZOOM_STEP));
-  try { localStorage.setItem(ZOOM_KEY, String(zoomPct)); } catch { /* ignore */ }
+function setZoom(w: ZoomWhich, pct: number): void {
+  const v = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(pct / ZOOM_STEP) * ZOOM_STEP));
+  if (w === 'editor') editorZoomPct = v; else previewZoomPct = v;
+  try { localStorage.setItem(w === 'editor' ? ZOOM_EDITOR_KEY : ZOOM_PREVIEW_KEY, String(v)); } catch { /* ignore */ }
   applyZoom();
-  renderRibbon();
 }
-function cycleZoomTarget(): void {
-  zoomTarget = zoomTarget === 'preview' ? 'editor' : zoomTarget === 'editor' ? 'both' : 'preview';
-  try { localStorage.setItem(ZOOM_TARGET_KEY, zoomTarget); } catch { /* ignore */ }
-  applyZoom();
-  renderRibbon();
-}
-function zoomTargetLabel(): string {
-  return zoomTarget === 'editor' ? 'Editor' : zoomTarget === 'both' ? 'Both' : 'Preview';
-}
-function zoomReadout(): HTMLElement {
-  const b = el('button', { class: 'zoom-pct', title: 'Reset zoom to 100%' }, `${zoomPct}%`);
+
+/** A ribbon button showing "Editor 100%" that opens its numeric zoom dropdown. */
+function zoomBtn(w: ZoomWhich, icon: string): HTMLElement {
+  const labelSpan = el('span', {}, `${zoomLabel(w)} ${currentZoom(w)}%`);
+  const b = el('button', { class: 'rbtn', title: `${zoomLabel(w)} zoom` }, el('span', { class: 'ico' }, icon), labelSpan);
   b.addEventListener('mousedown', (e) => e.preventDefault());
-  b.onclick = () => setZoomPct(100);
+  b.onclick = () => openZoomPop(b, w, labelSpan);
   return b;
+}
+
+let zoomPop: HTMLElement | null = null;
+let zoomAnchor: HTMLElement | null = null;
+function onZoomDocDown(e: MouseEvent): void {
+  const t = e.target as Node;
+  if (zoomPop && !zoomPop.contains(t) && !(zoomAnchor && zoomAnchor.contains(t))) closeZoomPop();
+}
+function closeZoomPop(): void {
+  zoomPop?.remove();
+  zoomPop = null; zoomAnchor = null;
+  document.removeEventListener('mousedown', onZoomDocDown, true);
+}
+function openZoomPop(anchor: HTMLElement, w: ZoomWhich, labelSpan: HTMLElement): void {
+  if (zoomPop) { const wasSame = zoomAnchor === anchor; closeZoomPop(); if (wasSame) return; }
+  const input = el('input', { type: 'number', class: 'zoom-input', min: String(ZOOM_MIN), max: String(ZOOM_MAX), step: String(ZOOM_STEP) }) as HTMLInputElement;
+  const refresh = (): void => { input.value = String(currentZoom(w)); labelSpan.textContent = `${zoomLabel(w)} ${currentZoom(w)}%`; };
+  input.value = String(currentZoom(w));
+  const minus = el('button', { class: 'zoom-step', title: 'Zoom out' }, '−');
+  const plus = el('button', { class: 'zoom-step', title: 'Zoom in' }, '+');
+  minus.onclick = () => { setZoom(w, currentZoom(w) - ZOOM_STEP); refresh(); input.focus(); };
+  plus.onclick = () => { setZoom(w, currentZoom(w) + ZOOM_STEP); refresh(); input.focus(); };
+  input.onchange = () => { setZoom(w, parseInt(input.value, 10) || 100); refresh(); };
+  input.onkeydown = (e) => { if (e.key === 'Enter') closeZoomPop(); };
+  const pop = el('div', { class: 'zoom-pop' },
+    el('div', { class: 'zoom-pop-title' }, `${zoomLabel(w)} zoom`),
+    el('div', { class: 'zoom-pop-row' }, minus, input, plus),
+  );
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.round(r.left)}px`;
+  pop.style.top = `${Math.round(r.bottom + 4)}px`;
+  document.body.appendChild(pop);
+  zoomPop = pop; zoomAnchor = anchor;
+  setTimeout(() => document.addEventListener('mousedown', onZoomDocDown, true), 0);
+  input.focus(); input.select();
 }
 async function exportTyp(): Promise<void> {
   const source = generate(logic, editor.state.doc);
