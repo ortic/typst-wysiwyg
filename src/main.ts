@@ -841,19 +841,25 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
-  ensureCalloutLet();
+  normalizeLogic();
   syncJustify(); syncColumns(); syncNumbering(); syncBibliography(); syncPageMetrics();
   renderRibbon();
   schedulePreview();
 }
 
-/** Make the built-in callout a visible definition when the document uses it but
- *  has no callout binding yet (legacy docs / templates seeded before this). */
-function ensureCalloutLet(): void {
-  if (logic.lets.some((l) => l.name === 'callout')) return;
-  let used = false;
-  editor.state.doc.descendants((n) => { if (n.type.name === 'callout') used = true; });
-  if (used) logic.lets = [calloutLet(), ...logic.lets];
+/** Normalize a freshly loaded document: repair raw #let code that an older
+ *  importer markup-escaped, and surface the built-in callout when used. */
+function normalizeLogic(): void {
+  // `\#`, `\[`, `\]` are never valid in Typst code; a raw #let carrying them was
+  // corrupted by the old line-heuristic parser. Unescape so it compiles again.
+  for (const l of logic.lets) {
+    if (l.kind === 'raw') l.code = l.code.replace(/\\([#[\]])/g, '$1');
+  }
+  if (!logic.lets.some((l) => l.name === 'callout')) {
+    let used = false;
+    editor.state.doc.descendants((n) => { if (n.type.name === 'callout') used = true; });
+    if (used) logic.lets = [calloutLet(), ...logic.lets];
+  }
 }
 
 const DOC_FILTERS = [{ name: 'Typst', extensions: ['typ'] }, { name: 'Typst WYSIWYG', extensions: ['typwys', 'json'] }];
@@ -1016,7 +1022,7 @@ function openTemplateModal(): void {
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
-        ensureCalloutLet();
+        normalizeLogic();
       });
       grid.append(card);
     }
@@ -1388,5 +1394,5 @@ if (restored) {
   if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
 }
 mountEditor((restored?.content ?? initial.content) as object);
-ensureCalloutLet();
+normalizeLogic();
 renderRibbon();
