@@ -20,17 +20,20 @@ The first load fetches a ~28 MB compiler, so give it a moment.
 
 ## The core idea
 
-Typst isn't a document format — it's a programming language. So instead of trying to
-round-trip arbitrary `.typ` files, the editor **owns a structured document model** and
-compiles it one way to Typst:
+Typst isn't a document format — it's a programming language. So the editor **owns a
+structured document model** and compiles it one way to Typst:
 
 ```
 structured model (JSON AST)  ──▶  generated .typ  ──▶  Typst compiler (WASM)  ──▶  SVG / PDF
 ```
 
+Loading a `.typ` parses it back into that model (see `typimport.ts`): a structural,
+marker-free scan that turns recognized constructs into editable blocks and keeps anything
+it can't model — imports, custom `#set` arguments, arbitrary preamble — **verbatim**, so
+loading and re-saving doesn't quietly drop things.
+
 Save writes a `.typ` that is real Typst source **and** carries the editable state in a
-trailing comment, so the editor's own files round-trip exactly; other `.typ` files are
-imported best-effort (see `typimport.ts`).
+trailing comment, so the editor's own files round-trip exactly.
 
 ### Two layers
 
@@ -44,7 +47,8 @@ imported best-effort (see `typimport.ts`).
 - **Logic / style layer** — `#set`, `#let` and `#show`, managed through the ribbon
   (Layout tab for page/text/paragraph settings, Insert → Definitions for `#let`
   bindings, Insert → Show rules for a structured `#show` editor). Normal users never
-  touch code.
+  touch code. The built-in `callout` is a real, editable definition here, and any
+  imports / preamble preserved from a loaded `.typ` are shown read-only alongside it.
 
 ### Templates
 
@@ -59,7 +63,8 @@ an icon.
   markdown-style input rules.
 - **Inline formatting**: bold, italic, strike, links.
 - **Tables** — editable (add/remove rows & columns, resizable), full-width, serialized
-  to `#table(...)`.
+  to `#table(...)`. Styling from an imported table (column widths, `align`, `stroke`, …)
+  is kept verbatim on save while the cells stay editable.
 - **Images** — insert, drag-and-drop or paste a picture; it renders in the live preview
   too (the bytes are fed to the Typst compiler's virtual filesystem). Inline editable
   **figure captions** → `#figure(image(..), caption: [..])`.
@@ -82,17 +87,25 @@ an icon.
   justification, **page numbers, header and footer**.
 - **Save / open `.typ`** by default — the saved file is real Typst source that also
   carries the editable state in a trailing comment, so your own documents round-trip
-  exactly; any other `.typ` is imported best-effort (prose structured, the rest kept as
-  raw blocks). Plus **autosave** to the browser (Ctrl/Cmd+S), and native file dialogs in
+  exactly. Any other `.typ` is parsed structurally: headings, lists, tables, callouts,
+  figures, `#let`/`#show` and `#set` rules become editable, while imports and anything
+  unmodeled (`#import`, custom `#set` args, `#show: template.with(…)`) are preserved
+  verbatim. Plus **autosave** to the browser (Ctrl/Cmd+S), and native file dialogs in
   the desktop build.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, … by set-style
-  or a full `it => …` function, with custom selectors) and a **`#let` definitions** editor.
-- **Live Typst preview** (compiled in the browser via WASM) with friendly compile errors,
-  hidden by default and toggled from the View tab.
-- **Typst source viewer** with syntax highlighting (View → Typst source).
+  or a full `it => …` function, with custom selectors) and a **`#let` definitions** editor
+  that lists every definition — the built-in `callout`, your own bindings, and the
+  imports/preamble preserved from a loaded file.
+- **Live Typst preview** (compiled in the browser via WASM) — **shown by default and
+  remembered across sessions**, with friendly compile errors that offer to **open the
+  Typst source at the offending spot**.
+- **Zoom** the editor page and the preview **independently** (View tab) via a numeric
+  dropdown per surface; both levels are remembered across sessions.
+- **Editable Typst source** with syntax highlighting (View → Typst source): edit the
+  markup and **apply** to re-parse it back into the document.
 - **Template gallery** with search and icons.
 - **Export** to `.typ` and PDF.
-- Built-in `callout` component and a **raw Typst** escape hatch.
+- Built-in, editable `callout` component and a **raw Typst** escape hatch.
 
 ## Tech
 
@@ -160,18 +173,28 @@ Most of the editor is in place (see Features), including **multi-column layout**
 **function-style `#show` rules**, **labels + cross-references** (`<label>` /
 `#ref` with automatic heading numbering), **citations & bibliography** (paste
 BibTeX or Hayagriva YAML, cite entries inline), a **code listing** block
-(syntax-highlighted `` ``` `` raw blocks), **user templates**, and a `.typ`
-importer that structures tables, lists, callouts, `#let`/`#show`, code listings
-and inline functions. It imports **figures** (`#image`/`#figure`) as real image
-nodes with a placeholder preview (a plain `.typ` carries no image bytes) that
-keeps the path and caption for re-export. There are **golden round-trip
-serializer tests** (`npm test`).
+(syntax-highlighted `` ``` `` raw blocks), **user templates**, and a **marker-free,
+structural `.typ` importer**: it parses the whole document in one pass — routing
+code statements (`#let`/`#set`/`#show`/`#import`) to the logic layer wherever they
+appear and turning headings, lists, tables (styling kept verbatim), callouts,
+columns and code listings into editable blocks — and preserves imports and any
+unmodeled preamble verbatim, so loading and re-saving doesn't lose them. It imports
+`#image`/`#figure` as real image nodes with a placeholder preview (a plain `.typ`
+carries no image bytes), keeping the path and caption for re-export. There are
+**golden round-trip serializer tests** and **fidelity tests against real-world
+templates** (`npm test`).
 
 Compilation runs in a **Web Worker**, so even large documents never block typing
-or scrolling. Compile errors are located heuristically — the embedded compiler
-only emits opaque span IDs, not source ranges, so a precise error→block map
-isn't possible via its snippet API; instead the offending identifier is matched
-against raw/math blocks to offer a jump.
+or scrolling. The embedded compiler only emits opaque span IDs, not source ranges,
+so a precise error→block map isn't possible via its snippet API; instead, a compile
+error offers an **Open Typst source** action that opens the generated `.typ` and —
+when the message names an identifier — scrolls to and highlights it (and, where an
+identifier matches a single raw/math block, also offers a jump into the editor).
+
+**Known gaps / next up:** labels and cross-references that use the common
+`prefix:name` convention (`<fig:sun>`, `@fig:sun`) aren't parsed yet; multi-line
+`#figure(image(…))` and `#figure(table(…))` currently import as raw blocks rather
+than editable nodes.
 
 **Deliberately out of scope:**
 
