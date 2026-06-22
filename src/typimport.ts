@@ -240,12 +240,22 @@ function parseImageBlock(text: string): object | null {
   if (!path) return null;
   const width = text.match(/width:\s*([\d.]+)%/);
   const border = /box\(\s*stroke/.test(text);
-  const cap = text.match(/caption:\s*\[([\s\S]*)\]\s*\)\s*$/);
-  const alt = cap ? unescapeMarkup(cap[1].trim()) : '';
+  const alt = parseCaption(text);
+  const label = text.match(/<([\w:.-]+)>\s*$/)?.[1] ?? null;
   return {
     type: 'image',
-    attrs: { src: imagePlaceholder(path), path, width: width ? parseFloat(width[1]) : 80, border, alt },
+    attrs: { src: imagePlaceholder(path), path, width: width ? parseFloat(width[1]) : 80, border, alt, label },
   };
+}
+
+/** A figure `caption:` value, whether written as `[content]` or a "string". */
+function parseCaption(text: string): string {
+  const ci = text.indexOf('caption:');
+  if (ci < 0) return '';
+  const after = text.slice(ci + 'caption:'.length).replace(/^\s+/, '');
+  if (after.startsWith('[')) return unescapeMarkup(readBalancedFrom(after, 0, '[', ']').content.trim());
+  const str = after.match(/^"((?:[^"\\]|\\.)*)"/);
+  return str ? unescapeTypstString(str[1]) : '';
 }
 
 function parseContent(text: string): { type: 'doc'; content: object[] } {
@@ -361,7 +371,8 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     }
 
     // #image / #figure / bordered #box[#image …] — structure into image nodes.
-    if (/^#(?:image|figure|box)\b/.test(t) && t.includes('image(')) {
+    // Read the full (possibly multi-line) construct first, then decide.
+    if (/^#(?:image|figure|box)\b/.test(t)) {
       let j = i, combined = '', depthP = 0, depthB = 0;
       do {
         combined += (combined ? '\n' : '') + lines[j];
@@ -371,8 +382,10 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
         }
         j++;
       } while (j < lines.length && (depthP > 0 || depthB > 0));
-      const node = parseImageBlock(combined);
-      if (node) { blocks.push(node); i = j; continue; }
+      if (combined.includes('image(')) {
+        const node = parseImageBlock(combined);
+        if (node) { blocks.push(node); i = j; continue; }
+      }
     }
 
     if (t.startsWith('$')) {

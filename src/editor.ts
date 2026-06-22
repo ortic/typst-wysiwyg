@@ -91,6 +91,12 @@ const TypstImage = Image.extend({
         parseHTML: (el) => el.getAttribute('data-border') === 'true',
         renderHTML: (attrs) => (attrs.border ? { 'data-border': 'true' } : {}),
       },
+      // Figure label (e.g. <fig:sun>) so cross-references survive round-trip.
+      label: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-label') || null,
+        renderHTML: (attrs) => (attrs.label ? { 'data-label': attrs.label } : {}),
+      },
     };
   },
   addNodeView() {

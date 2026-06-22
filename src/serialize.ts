@@ -151,9 +151,14 @@ function serializeBlock(node: PMNode): string {
       const alt = (node.attrs.alt as string) || '';
       const width = (node.attrs.width as number) ?? 80;
       const border = node.attrs.border as boolean;
+      const label = (node.attrs.label as string) || '';
       let core = `image(${quote(path)}, width: ${width}%)`;
       if (border) core = `box(stroke: 0.75pt + rgb("#888888"), inset: 0pt)[#${core}]`;
-      return alt ? `#figure(${core}, caption: [${escapeMarkup(alt)}])` : `#${core}`;
+      // A caption or a label requires the #figure wrapper; the label trails it.
+      const body = alt ? `#figure(${core}, caption: [${escapeMarkup(alt)}])`
+        : label ? `#figure(${core})`
+        : `#${core}`;
+      return label ? `${body} <${label}>` : body;
     }
     case 'mathBlock':
       return `$ ${(node.attrs.src as string) || ''} $`;

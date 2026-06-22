@@ -286,6 +286,23 @@ See @sec:methods and @eq:gamma.`;
     expect(cycle(typ).typ).toBe(typ); // idempotent
   });
 
+  it('round-trips a multi-line figure with caption and label', () => {
+    const src = `#figure(
+  image("/sun.png", width: 60%),
+  caption: [The Sun],
+) <fig:sun>
+
+See @fig:sun.`;
+    const parsed = importTypst(src) as { logic: DocLogic; content: { content: { type: string; attrs?: Record<string, unknown> }[] } };
+    const img = parsed.content.content.find((b) => b.type === 'image');
+    expect(img, 'multi-line figure should import as an image node').toBeTruthy();
+    expect(img!.attrs).toMatchObject({ path: '/sun.png', width: 60, alt: 'The Sun', label: 'fig:sun' });
+    const typ = generate(parsed.logic, PMNode.fromJSON(schema, parsed.content));
+    expect(typ).toContain('#figure(image("/sun.png", width: 60%), caption: [The Sun]) <fig:sun>');
+    expect(typ).toContain('#ref(<fig:sun>)');
+    expect(cycle(typ).typ).toBe(typ); // idempotent
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');
