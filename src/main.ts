@@ -45,6 +45,15 @@ let logic: DocLogic = initial.logic;
 // Remembered across sessions; shown by default so a broken document is visible.
 const PREVIEW_KEY = 'typst-wysiwyg:preview';
 let previewVisible = ((): boolean => { try { return localStorage.getItem(PREVIEW_KEY) !== '0'; } catch { return true; } })();
+
+// Zoom: a percentage applied (via CSS `zoom`) to the editor page, the preview,
+// or both — the target is the user's choice. All persisted across sessions.
+type ZoomTarget = 'preview' | 'editor' | 'both';
+const ZOOM_KEY = 'typst-wysiwyg:zoom';
+const ZOOM_TARGET_KEY = 'typst-wysiwyg:zoomTarget';
+const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
+let zoomPct = ((): number => { const n = parseInt(localStorage.getItem(ZOOM_KEY) || '', 10); return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; })();
+let zoomTarget = ((): ZoomTarget => { const v = localStorage.getItem(ZOOM_TARGET_KEY); return v === 'editor' || v === 'both' ? v : 'preview'; })();
 type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code';
 let activeTab: TabId = 'home';
 let editor!: Editor;
@@ -95,6 +104,7 @@ async function refreshPreview(): Promise<void> {
   } catch (e) {
     previewPane.replaceChildren(formatCompileError(e));
   }
+  applyZoom();
 }
 
 /** Pull the human-readable message(s) and hints out of a Typst diagnostic. */
@@ -633,6 +643,12 @@ function ribbonGroups(): Node[] {
           rbtn('▦', previewVisible ? 'Hide preview' : 'Show preview', togglePreview, previewVisible),
           rbtn('☰', 'Outline', toggleOutline, outlineVisible),
         ),
+        group('Zoom',
+          rbtn('−', 'Zoom out', () => setZoomPct(zoomPct - ZOOM_STEP)),
+          zoomReadout(),
+          rbtn('+', 'Zoom in', () => setZoomPct(zoomPct + ZOOM_STEP)),
+          rbtn(zoomTarget === 'editor' ? '✎' : zoomTarget === 'both' ? '◫' : '▦', zoomTargetLabel(), cycleZoomTarget),
+        ),
         group('Find', rbtn(SEARCH_ICON, 'Find & replace', openFindBar)),
         group('Source', rbtn('</>', 'Typst source', openSourceModal)),
       ];
@@ -783,6 +799,37 @@ function togglePreview(): void {
   previewPane.classList.toggle('hidden', !previewVisible);
   renderRibbon();
   if (previewVisible) { previewPane.replaceChildren(el('div', { class: 'loading' }, 'Rendering…')); refreshPreview(); }
+}
+
+// --- Zoom (editor page / preview / both) -----------------------------------
+function zoomFactor(which: 'editor' | 'preview'): string {
+  return String(zoomTarget === which || zoomTarget === 'both' ? zoomPct / 100 : 1);
+}
+function applyZoom(): void {
+  pageEl.style.zoom = zoomFactor('editor');
+  const child = previewPane.firstElementChild as HTMLElement | null;
+  if (child) child.style.zoom = zoomFactor('preview');
+}
+function setZoomPct(pct: number): void {
+  zoomPct = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(pct / ZOOM_STEP) * ZOOM_STEP));
+  try { localStorage.setItem(ZOOM_KEY, String(zoomPct)); } catch { /* ignore */ }
+  applyZoom();
+  renderRibbon();
+}
+function cycleZoomTarget(): void {
+  zoomTarget = zoomTarget === 'preview' ? 'editor' : zoomTarget === 'editor' ? 'both' : 'preview';
+  try { localStorage.setItem(ZOOM_TARGET_KEY, zoomTarget); } catch { /* ignore */ }
+  applyZoom();
+  renderRibbon();
+}
+function zoomTargetLabel(): string {
+  return zoomTarget === 'editor' ? 'Editor' : zoomTarget === 'both' ? 'Both' : 'Preview';
+}
+function zoomReadout(): HTMLElement {
+  const b = el('button', { class: 'zoom-pct', title: 'Reset zoom to 100%' }, `${zoomPct}%`);
+  b.addEventListener('mousedown', (e) => e.preventDefault());
+  b.onclick = () => setZoomPct(100);
+  return b;
 }
 async function exportTyp(): Promise<void> {
   const source = generate(logic, editor.state.doc);
@@ -1422,6 +1469,7 @@ if (restored) {
 mountEditor((restored?.content ?? initial.content) as object);
 normalizeLogic();
 renderRibbon();
+applyZoom(); // restore the persisted zoom for the editor page
 
 // Show and compile the preview on load when it was last left open (default on).
 if (previewVisible) {

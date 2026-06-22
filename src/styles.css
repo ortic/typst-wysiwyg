@@ -55,6 +55,9 @@ select, input[type=text], input[type=number], textarea {
   padding: 4px 10px; border-right: 1px solid #ecedf1; min-width: max-content;
 }
 .rcontrols { display: flex; align-items: center; gap: 6px; flex: 1; }
+.zoom-pct { align-self: center; min-width: 46px; height: 30px; padding: 0 8px; border: 1px solid #cbd0da;
+  background: #fff; border-radius: 6px; cursor: pointer; font: 12px/1 ui-monospace, Menlo, Consolas, monospace; color: #1e2330; }
+.zoom-pct:hover { background: #f0f1f4; }
 .glabel { font-size: 10px; color: #9aa0ab; margin-top: 4px; }
 
 .rbtn {
