@@ -42,7 +42,9 @@ const SLASH_ITEMS: SlashItem[] = [
 // ---------------------------------------------------------------------------
 const initial = TEMPLATES.find((t) => t.id === 'report')!.make();
 let logic: DocLogic = initial.logic;
-let previewVisible = false;
+// Remembered across sessions; shown by default so a broken document is visible.
+const PREVIEW_KEY = 'typst-wysiwyg:preview';
+let previewVisible = ((): boolean => { try { return localStorage.getItem(PREVIEW_KEY) !== '0'; } catch { return true; } })();
 type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code';
 let activeTab: TabId = 'home';
 let editor!: Editor;
@@ -766,6 +768,7 @@ function updateTable(attrs: Record<string, unknown>): void {
 // ---------------------------------------------------------------------------
 function togglePreview(): void {
   previewVisible = !previewVisible;
+  try { localStorage.setItem(PREVIEW_KEY, previewVisible ? '1' : '0'); } catch { /* ignore */ }
   previewPane.classList.toggle('hidden', !previewVisible);
   renderRibbon();
   if (previewVisible) { previewPane.replaceChildren(el('div', { class: 'loading' }, 'Rendering…')); refreshPreview(); }
@@ -1396,3 +1399,10 @@ if (restored) {
 mountEditor((restored?.content ?? initial.content) as object);
 normalizeLogic();
 renderRibbon();
+
+// Show and compile the preview on load when it was last left open (default on).
+if (previewVisible) {
+  previewPane.classList.remove('hidden');
+  previewPane.replaceChildren(el('div', { class: 'loading' }, 'Rendering…'));
+  refreshPreview();
+}
