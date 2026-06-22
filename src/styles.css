@@ -347,12 +347,29 @@ select, input[type=text], input[type=number], textarea {
   line-height: 1; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
 .modal-x:hover { background: #f0f1f4; color: #1e2330; }
 
-.source-wrap { overflow: auto; background: #1e2330; }
+.source-wrap { overflow: hidden; background: #1e2330; }
 .source-code {
   margin: 0; padding: 16px 18px; min-height: 200px;
   font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace;
   color: #d7dce6; white-space: pre; tab-size: 2;
 }
+
+/* Editable source view: textarea layered over a highlighted pre. */
+.source-edit { position: relative; height: 60vh; }
+.source-edit > pre, .source-edit > textarea {
+  position: absolute; inset: 0; box-sizing: border-box; margin: 0;
+  padding: 16px 18px; border: 0; background: transparent;
+  font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre; tab-size: 2;
+}
+.source-edit > pre { overflow: hidden; pointer-events: none; color: #d7dce6; }
+.source-edit > pre code { font: inherit; }
+.source-edit > textarea {
+  overflow: auto; resize: none; outline: none;
+  color: transparent; caret-color: #fff;
+}
+.source-edit > textarea::selection { background: rgba(116,192,252,.35); }
+.source-err { color: #b91c1c; font-size: 12px; align-self: center; margin-right: auto; }
 .tk-com  { color: #7d8694; font-style: italic; }
 .tk-str  { color: #8ce99a; }
 .tk-fn   { color: #b197fc; }

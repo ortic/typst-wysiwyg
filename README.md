@@ -106,7 +106,7 @@ an icon.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:1420
 npm run build    # typecheck + production build
 ```
 

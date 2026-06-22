@@ -1206,22 +1206,63 @@ function doneBtn(): HTMLElement {
 
 function openSourceModal(): void {
   const source = generate(logic, editor.state.doc);
-  const modal = el('div', { class: 'modal modal-wide' });
+
+  // Editable code area: a transparent <textarea> layered over a highlighted
+  // <pre>. They share identical metrics, so the caret tracks the colored text.
+  const code = el('code', {});
+  const pre = el('pre', { class: 'source-hl', 'aria-hidden': 'true' }, code);
+  const ta = el('textarea', { class: 'source-input', spellcheck: 'false' }) as HTMLTextAreaElement;
+  ta.value = source;
+  const syncHl = (): void => {
+    const v = ta.value;
+    // Trailing space keeps a final empty line visible (a lone "\n" would collapse).
+    code.innerHTML = highlightTypst(v) + (v.endsWith('\n') ? ' ' : '');
+  };
+  const syncScroll = (): void => { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; };
+  syncHl();
+  ta.addEventListener('input', () => { syncHl(); syncScroll(); });
+  ta.addEventListener('scroll', syncScroll);
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') { // insert two spaces instead of leaving the field
+      e.preventDefault();
+      const s = ta.selectionStart, en = ta.selectionEnd;
+      ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(en);
+      ta.selectionStart = ta.selectionEnd = s + 2;
+      syncHl();
+    }
+  });
+
   const copy = el('button', {}, 'Copy');
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(source); copy.textContent = 'Copied'; setTimeout(() => (copy.textContent = 'Copy'), 1200); }
+    try { await navigator.clipboard.writeText(ta.value); copy.textContent = 'Copied'; setTimeout(() => (copy.textContent = 'Copy'), 1200); }
     catch { copy.textContent = 'Copy failed'; }
   };
   const dl = el('button', {}, 'Download .typ');
   dl.onclick = exportTyp;
-  const pre = el('pre', { class: 'source-code' });
-  pre.innerHTML = highlightTypst(source);
+  const closeX = el('button', { class: 'modal-x', 'aria-label': 'Close', title: 'Close' }, '✕');
+  closeX.onclick = closeModal;
+
+  const err = el('div', { class: 'source-err' });
+  const cancel = el('button', {}, 'Cancel');
+  cancel.onclick = closeModal;
+  const apply = el('button', { class: 'primary' }, 'Apply changes');
+  apply.onclick = () => {
+    try {
+      openDocText(ta.value); // re-parse the edited markup into the document
+      closeModal();
+    } catch (e) {
+      err.textContent = 'Could not parse source: ' + String(e);
+    }
+  };
+
+  const modal = el('div', { class: 'modal modal-wide' });
   modal.append(
     el('div', { class: 'modal-head modal-head-row' },
-      el('div', {}, el('h3', {}, 'Typst source'), el('div', { class: 'muted' }, 'Generated from the document — read-only.')),
-      el('div', { class: 'modal-actions' }, copy, dl),
+      el('div', {}, el('h3', {}, 'Typst source'), el('div', { class: 'muted' }, 'Edit the markup, then apply to update the document.')),
+      el('div', { class: 'modal-actions' }, copy, dl, closeX),
     ),
-    el('div', { class: 'source-wrap' }, pre),
+    el('div', { class: 'source-wrap' }, el('div', { class: 'source-edit' }, pre, ta)),
+    el('div', { class: 'modal-foot' }, err, cancel, apply),
   );
   openModal(modal);
 }
