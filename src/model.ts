@@ -85,6 +85,12 @@ export interface DocLogic {
   lets: LetBinding[];
   shows: ShowRule[];
   bibliography?: Bibliography;
+  /**
+   * Top-level preamble statements we don't model (e.g. `#import`,
+   * `#set document(...)`), kept verbatim so loading and re-saving a .typ
+   * doesn't drop them.
+   */
+  extra?: string[];
 }
 
 let counter = 0;

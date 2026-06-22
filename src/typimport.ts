@@ -517,6 +517,52 @@ function parseShows(text: string): ShowRule[] {
   return shows;
 }
 
+/** True when every bracket/paren/brace in `s` is balanced (strings ignored). */
+function isBalanced(s: string): boolean {
+  let depth = 0;
+  let inStr = false;
+  for (let k = 0; k < s.length; k++) {
+    const c = s[k];
+    if (inStr) { if (c === '\\') k++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+  }
+  return depth <= 0;
+}
+
+/** Split a preamble into logical statements, joining lines that leave a
+ *  bracket/paren/brace open (so multi-line #set/#let calls stay together). */
+function splitStatements(text: string): string[] {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trim() === '') { i++; continue; }
+    let buf = lines[i];
+    while (!isBalanced(buf) && i + 1 < lines.length) buf += '\n' + lines[++i];
+    out.push(buf);
+    i++;
+  }
+  return out;
+}
+
+/** Collect preamble statements we don't otherwise model (imports, custom #set,
+ *  arbitrary top-level code) so they survive a load → save round-trip. */
+function parseExtra(text: string): string[] {
+  const extra: string[] = [];
+  for (const stmt of splitStatements(text)) {
+    const t = stmt.trim();
+    if (t.startsWith('//')) continue;                       // comments
+    if (/^#set (page|text|par|heading)\b/.test(t)) continue; // -> style
+    if (t.startsWith('#let ')) continue;                    // -> lets
+    if (t.startsWith('#show ')) continue;                   // -> shows
+    if (t.startsWith('#bibliography(')) continue;           // -> bibliography
+    extra.push(t);
+  }
+  return extra;
+}
+
 /** Best-effort import of a plain .typ document. */
 export function importTypst(text: string): { logic: DocLogic; content: object } {
   const marker = '// --- content ---';
@@ -542,7 +588,9 @@ export function importTypst(text: string): { logic: DocLogic; content: object } 
   // Seed the built-in callout when the body uses it but no definition was found,
   // so it stays visible/editable and survives the next save.
   if (usesCallout(content) && !lets.some((l) => l.name === 'callout')) lets.unshift(calloutLet());
+  const extra = parseExtra(preamble);
   const logic: DocLogic = { style: parseStyle(preamble), lets, shows: parseShows(preamble) };
+  if (extra.length) logic.extra = extra;
   return { logic, content };
 }
 

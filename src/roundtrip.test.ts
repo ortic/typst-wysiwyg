@@ -170,6 +170,26 @@ describe('generated Typst', () => {
     expect(second.logic.lets.find((l) => l.name === 'callout')!.code).toContain('#ffe3e3');
   });
 
+  it('preserves imports and unmodeled preamble across a save', () => {
+    const src = `#import "@preview/cetz:0.2.0": canvas
+#set document(title: "Paper")
+#set page(paper: "a4", margin: 2cm)
+
+= Intro
+Body text.`;
+    const first = importTypst(src) as { logic: DocLogic; content: object };
+    expect(first.logic.extra).toEqual([
+      '#import "@preview/cetz:0.2.0": canvas',
+      '#set document(title: "Paper")',
+    ]);
+    const typ = generate(first.logic, PMNode.fromJSON(schema, first.content));
+    expect(typ).toContain('#import "@preview/cetz:0.2.0": canvas');
+    expect(typ).toContain('#set document(title: "Paper")');
+    // A second cycle keeps the same preserved preamble (idempotent).
+    const second = importTypst(typ) as { logic: DocLogic };
+    expect(second.logic.extra).toEqual(first.logic.extra);
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

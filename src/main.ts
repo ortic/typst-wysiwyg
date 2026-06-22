@@ -1065,8 +1065,9 @@ function openDefinitionsModal(): void {
   const list = el('div', { class: 'def-list' });
   const draw = () => {
     list.replaceChildren();
-    if (!logic.lets.length) list.append(el('div', { class: 'muted' }, 'No definitions yet. These become #let bindings.'));
+    if (!logic.lets.length && !logic.extra?.length) list.append(el('div', { class: 'muted' }, 'No definitions yet. These become #let bindings.'));
     for (const b of logic.lets) list.append(letRow(b, draw));
+    if (logic.extra?.length) list.append(extraRow());
   };
   const add = el('button', { class: 'primary' }, '+ Add definition');
   add.onclick = () => { logic.lets.push({ id: uid('let'), name: `var${logic.lets.length + 1}`, kind: 'value', code: '""' }); draw(); schedulePreview(); };
@@ -1077,6 +1078,20 @@ function openDefinitionsModal(): void {
   );
   openModal(modal);
   draw();
+}
+
+/** Read-only view of imports / unmodeled preamble preserved from the .typ. */
+function extraRow(): HTMLElement {
+  const box = el('div', { class: 'def' });
+  box.append(el('div', { class: 'bhead' },
+    el('strong', { class: 'def-name' }, 'Imports & preamble'),
+    el('span', { class: 'tag' }, 'preserved'),
+    el('span', { class: 'spacer' }),
+    el('span', { class: 'muted' }, 'read-only')));
+  const pre = el('pre', { class: 'def-ro' });
+  pre.innerHTML = highlightTypst((logic.extra ?? []).join('\n'));
+  box.append(pre);
+  return box;
 }
 
 function letRow(b: LetBinding, redraw: () => void): HTMLElement {
