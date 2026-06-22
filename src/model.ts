@@ -14,11 +14,13 @@ export interface DocStyle {
     columns?: number;        // 1 = single column (default)
     headingNumbering?: boolean; // number headings (1, 1.1, …) — needed for @refs
     numbering?: boolean;     // page numbers in the footer
+    numberingFormat?: string; // raw numbering value (e.g. `"1 / 1"`), preserved from import
     header?: string;     // header text (markup)
     footer?: string;     // footer text (markup)
+    extra?: string[];    // unmodeled #set page args, kept verbatim for round-trip
   };
-  text: { font: string; sizePt: number }; // empty font => Typst default
-  par: { leadingEm: number; justify: boolean };
+  text: { font: string; sizePt: number; extra?: string[] }; // empty font => Typst default
+  par: { leadingEm: number; justify: boolean; extra?: string[] };
 }
 
 /**

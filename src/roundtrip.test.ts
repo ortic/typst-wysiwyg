@@ -217,6 +217,22 @@ Body paragraph here.`;
     expect(types).toContain('paragraph');
   });
 
+  it('preserves unmodeled #set arguments and the numbering format', () => {
+    const src = `#set page(paper: "a4", margin: 2cm, numbering: "1 / 1")
+#set text(size: 11pt, lang: "en", fill: rgb("#333333"))
+#set par(leading: 0.65em, justify: true, first-line-indent: 1em)
+
+= Title
+Body.`;
+    const first = cycle(src);
+    expect(first.typ).toContain('numbering: "1 / 1"');
+    expect(first.typ).toContain('lang: "en"');
+    expect(first.typ).toContain('fill: rgb("#333333")');
+    expect(first.typ).toContain('first-line-indent: 1em');
+    // and a second cycle is byte-identical (no drift in the preserved args)
+    expect(cycle(first.typ).typ).toBe(first.typ);
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

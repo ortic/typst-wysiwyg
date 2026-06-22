@@ -22,14 +22,18 @@ function genStyle(style: DocStyle): string {
   const lines: string[] = [];
   const pageArgs: string[] = [`paper: ${quote(PAPER[style.page.paper])}`, `margin: ${style.page.marginCm}cm`];
   if (style.page.columns && style.page.columns > 1) pageArgs.push(`columns: ${style.page.columns}`);
-  if (style.page.numbering) pageArgs.push(`numbering: "1"`);
+  if (style.page.numbering) pageArgs.push(`numbering: ${style.page.numberingFormat ?? '"1"'}`);
   if (style.page.header?.trim()) pageArgs.push(`header: [${escapeMarkup(style.page.header.trim())}]`);
   if (style.page.footer?.trim()) pageArgs.push(`footer: [${escapeMarkup(style.page.footer.trim())}]`);
+  if (style.page.extra) pageArgs.push(...style.page.extra);
   lines.push(`#set page(${pageArgs.join(', ')})`);
   const textArgs: string[] = [`size: ${style.text.sizePt}pt`];
   if (style.text.font.trim() !== '') textArgs.unshift(`font: ${quote(style.text.font.trim())}`);
+  if (style.text.extra) textArgs.push(...style.text.extra);
   lines.push(`#set text(${textArgs.join(', ')})`);
-  lines.push(`#set par(leading: ${style.par.leadingEm}em, justify: ${style.par.justify})`);
+  const parArgs: string[] = [`leading: ${style.par.leadingEm}em`, `justify: ${style.par.justify}`];
+  if (style.par.extra) parArgs.push(...style.par.extra);
+  lines.push(`#set par(${parArgs.join(', ')})`);
   if (style.page.headingNumbering) lines.push(`#set heading(numbering: "1.1")`);
   return lines.join('\n');
 }

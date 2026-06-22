@@ -404,28 +404,68 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
 }
 
 // --- preamble (#set / #let / #show) -----------------------------------------
+/** The top-level argument fragments of a `#set <name>(…)` rule, or null. */
+function setArgFragments(text: string, name: string): string[] | null {
+  const idx = text.indexOf(`#set ${name}(`);
+  if (idx < 0) return null;
+  const open = text.indexOf('(', idx);
+  const content = readBalancedFrom(text, open, '(', ')').content;
+  return splitTopLevel(content, ',').map((s) => s.trim()).filter(Boolean);
+}
+
+const argKey = (f: string): string => { const i = f.indexOf(':'); return i < 0 ? '' : f.slice(0, i).trim(); };
+const argVal = (f: string): string => { const i = f.indexOf(':'); return i < 0 ? '' : f.slice(i + 1).trim(); };
+
+/**
+ * Parse the #set page/text/par rules into the style model. Arguments we model
+ * are pulled out; anything else is kept verbatim in `extra` so re-saving never
+ * drops it (e.g. text `lang`/`fill`, par `first-line-indent`, page `flipped`).
+ */
 function parseStyle(text: string): DocLogic['style'] {
   const style = defaultStyle();
-  const page = text.match(/#set page\(([^\n]*)\)/);
-  if (page) {
-    const a = page[1];
-    const paper = a.match(/paper:\s*"([^"]+)"/); if (paper) style.page.paper = paper[1] as PageSize;
-    const margin = a.match(/margin:\s*([\d.]+)cm/); if (margin) style.page.marginCm = parseFloat(margin[1]);
-    const cols = a.match(/columns:\s*(\d+)/); if (cols) style.page.columns = parseInt(cols[1]);
-    if (/numbering:/.test(a)) style.page.numbering = true;
-    const header = a.match(/header:\s*\[([^\]]*)\]/); if (header) style.page.header = unescapeMarkup(header[1]);
-    const footer = a.match(/footer:\s*\[([^\]]*)\]/); if (footer) style.page.footer = unescapeMarkup(footer[1]);
+
+  const pageFrags = setArgFragments(text, 'page');
+  if (pageFrags) {
+    const extra: string[] = [];
+    for (const f of pageFrags) {
+      const k = argKey(f), v = argVal(f);
+      // paper & margin are always re-emitted, so never also keep them in extra.
+      if (k === 'paper') { const m = v.match(/^"([^"]+)"$/); if (m) style.page.paper = m[1] as PageSize; }
+      else if (k === 'margin') { const m = v.match(/^([\d.]+)cm$/); if (m) style.page.marginCm = parseFloat(m[1]); }
+      else if (k === 'columns') { const m = v.match(/^(\d+)$/); if (m) style.page.columns = parseInt(m[1]); else extra.push(f); }
+      else if (k === 'numbering') { style.page.numbering = true; style.page.numberingFormat = v; }
+      else if (k === 'header') { const m = v.match(/^\[([\s\S]*)\]$/); if (m) style.page.header = unescapeMarkup(m[1]); else extra.push(f); }
+      else if (k === 'footer') { const m = v.match(/^\[([\s\S]*)\]$/); if (m) style.page.footer = unescapeMarkup(m[1]); else extra.push(f); }
+      else extra.push(f);
+    }
+    if (extra.length) style.page.extra = extra;
   }
-  const txt = text.match(/#set text\(([^\n]*)\)/);
-  if (txt) {
-    const font = txt[1].match(/font:\s*"([^"]+)"/); if (font) style.text.font = font[1];
-    const size = txt[1].match(/size:\s*([\d.]+)pt/); if (size) style.text.sizePt = parseFloat(size[1]);
+
+  const txtFrags = setArgFragments(text, 'text');
+  if (txtFrags) {
+    const extra: string[] = [];
+    for (const f of txtFrags) {
+      const k = argKey(f), v = argVal(f);
+      if (k === 'font') { const m = v.match(/^"([^"]+)"$/); if (m) style.text.font = m[1]; else extra.push(f); }
+      else if (k === 'size') { const m = v.match(/^([\d.]+)pt$/); if (m) style.text.sizePt = parseFloat(m[1]); }
+      else extra.push(f);
+    }
+    if (extra.length) style.text.extra = extra;
   }
-  const par = text.match(/#set par\(([^\n]*)\)/);
-  if (par) {
-    const leading = par[1].match(/leading:\s*([\d.]+)em/); if (leading) style.par.leadingEm = parseFloat(leading[1]);
-    style.par.justify = /justify:\s*true/.test(par[1]);
+
+  const parFrags = setArgFragments(text, 'par');
+  if (parFrags) {
+    style.par.justify = false; // a present #set par without justify means not justified
+    const extra: string[] = [];
+    for (const f of parFrags) {
+      const k = argKey(f), v = argVal(f);
+      if (k === 'leading') { const m = v.match(/^([\d.]+)em$/); if (m) style.par.leadingEm = parseFloat(m[1]); }
+      else if (k === 'justify') { style.par.justify = /^true$/.test(v); }
+      else extra.push(f);
+    }
+    if (extra.length) style.par.extra = extra;
   }
+
   if (/#set heading\([^\n]*numbering:/.test(text)) style.page.headingNumbering = true;
   return style;
 }
