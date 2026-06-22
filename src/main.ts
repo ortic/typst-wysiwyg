@@ -121,18 +121,29 @@ function formatCompileError(e: unknown): HTMLElement {
     jump.onclick = () => editor.chain().focus().setTextSelection(loc.pos).scrollIntoView().run();
     box.append(jump);
   }
+  // The real Typst error lives in the generated source — often in the preamble
+  // or a definition, which aren't editor nodes. Offer to open it, highlighting
+  // the offending identifier when the message names one.
+  const srcJump = el('button', { class: 'err-jump err-jump-src' }, 'Open Typst source');
+  srcJump.onclick = () => openSourceModal({ focus: errorTokens(messages)[0] });
+  box.append(srcJump);
   return box;
 }
 
-/** Try to pin a compile error to a raw/math block by the identifier it names. */
-function locateError(messages: string[]): { pos: number; label: string } | null {
-  // Identifiers Typst tends to quote: `unknown variable: foo`, `unknown function: bar`.
+/** Identifiers a diagnostic tends to name: `unknown variable: foo`, `` `bar` ``. */
+function errorTokens(messages: string[]): string[] {
   const tokens = new Set<string>();
   for (const m of messages) {
     for (const t of m.matchAll(/(?:variable|function|name|label|key|field)[:\s]+`?([A-Za-z_][\w-]*)`?/g)) tokens.add(t[1]);
     for (const t of m.matchAll(/`([A-Za-z_][\w.-]*)`/g)) tokens.add(t[1]);
   }
-  if (!tokens.size) return null;
+  return [...tokens];
+}
+
+/** Try to pin a compile error to a raw/math block by the identifier it names. */
+function locateError(messages: string[]): { pos: number; label: string } | null {
+  const tokens = errorTokens(messages);
+  if (!tokens.length) return null;
   const CODE = new Set(['codeBlock', 'codeListing', 'mathBlock', 'mathInline']);
   let hit: { pos: number; label: string } | null = null;
   let count = 0;
@@ -140,7 +151,7 @@ function locateError(messages: string[]): { pos: number; label: string } | null 
     if (!CODE.has(node.type.name)) return;
     const text = node.type.name === 'mathBlock' || node.type.name === 'mathInline'
       ? String(node.attrs.src ?? '') : node.textContent;
-    if ([...tokens].some((t) => text.includes(t))) {
+    if (tokens.some((t) => text.includes(t))) {
       count++;
       const labelName = node.type.name === 'codeListing' ? 'code listing'
         : node.type.name === 'codeBlock' ? 'raw Typst block' : 'equation';
@@ -1259,7 +1270,8 @@ function doneBtn(): HTMLElement {
   return b;
 }
 
-function openSourceModal(): void {
+function openSourceModal(opts?: { focus?: string }): void {
+  const focus = typeof opts?.focus === 'string' ? opts.focus : undefined;
   const source = generate(logic, editor.state.doc);
 
   // Editable code area: a transparent <textarea> layered over a highlighted
@@ -1320,6 +1332,17 @@ function openSourceModal(): void {
     el('div', { class: 'modal-foot' }, err, cancel, apply),
   );
   openModal(modal);
+
+  // When opened from a compile error, select the offending identifier so the
+  // textarea scrolls to it and the line is highlighted.
+  const at = focus ? source.indexOf(focus) : -1;
+  if (at >= 0) {
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(at, at + focus!.length);
+      syncScroll();
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
