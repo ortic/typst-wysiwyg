@@ -25,12 +25,31 @@ export interface DocStyle {
  * A #let binding.
  *  - 'value':     `#let name = <expr>`
  *  - 'component': `#let name(body) = { ... }`
+ *  - 'raw':       the whole `#let …` statement, kept verbatim. Used for
+ *                 definitions we want to preserve exactly (e.g. the built-in
+ *                 `callout`, or anything imported that we can't model cleanly).
  */
 export interface LetBinding {
   id: string;
   name: string;
-  kind: 'value' | 'component';
+  kind: 'value' | 'component' | 'raw';
   code: string;
+}
+
+/** Stable id for the built-in callout so it round-trips without churn. */
+export const CALLOUT_LET_ID = 'let-callout';
+
+/** The built-in `callout(body)` component, seeded into every document. */
+export const CALLOUT_SRC = `#let callout(body) = block(
+  fill: rgb("#eef2ff"),
+  stroke: 0.5pt + rgb("#6366f1"),
+  inset: 10pt,
+  radius: 4pt,
+  width: 100%,
+)[#body]`;
+
+export function calloutLet(): LetBinding {
+  return { id: CALLOUT_LET_ID, name: 'callout', kind: 'raw', code: CALLOUT_SRC };
 }
 
 /**

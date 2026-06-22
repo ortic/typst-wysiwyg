@@ -381,6 +381,8 @@ select, input[type=text], input[type=number], textarea {
 .def { border: 1px solid #e1e4ea; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fbfbfd; }
 .def .bhead { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .def .spacer { flex: 1; }
+.def .def-name { font-family: ui-monospace, monospace; font-size: 13px; }
+.def .tag { font-size: 11px; color: #4f46e5; background: #eef2ff; border: 1px solid #d7dcff; border-radius: 999px; padding: 1px 8px; }
 .def textarea { width: 100%; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
 .def .bhead .when { color: #6b7280; font-size: 13px; }
 .def select, .def input[type=text], .def input[type=number] { padding: 4px 6px; border: 1px solid #cbd0da; border-radius: 5px; }

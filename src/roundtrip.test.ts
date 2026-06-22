@@ -141,6 +141,35 @@ describe('generated Typst', () => {
     expect(back.content.content.map((b) => b.type)).toEqual(['codeListing', 'paragraph']);
   });
 
+  it('captures the callout definition so it is visible and editable', () => {
+    const back = importTypst(SAMPLES.callout) as { logic: DocLogic };
+    expect(back.logic.lets).toEqual([
+      expect.objectContaining({ name: 'callout', kind: 'raw' }),
+    ]);
+  });
+
+  it('preserves a customized callout across a save', () => {
+    const custom = `#let callout(body) = block(
+  fill: rgb("#ffe3e3"),
+  inset: 14pt,
+)[#body]
+
+// --- content ---
+= Note
+#callout[
+  Watch out.
+]`;
+    const first = importTypst(custom) as { logic: DocLogic; content: object };
+    const callout = first.logic.lets.find((l) => l.name === 'callout')!;
+    expect(callout.code).toContain('#ffe3e3');
+    expect(callout.code).toContain('inset: 14pt');
+    // It must survive a generate → import round-trip unchanged.
+    const typ = generate(first.logic, PMNode.fromJSON(schema, first.content));
+    expect(typ).toContain('#ffe3e3');
+    const second = importTypst(typ) as { logic: DocLogic };
+    expect(second.logic.lets.find((l) => l.name === 'callout')!.code).toContain('#ffe3e3');
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

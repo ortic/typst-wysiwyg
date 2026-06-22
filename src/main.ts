@@ -1,7 +1,7 @@
 import './styles.css';
 import type { Editor } from '@tiptap/core';
 import type { DocLogic, LetBinding, ShowRule, ShowTarget } from './model';
-import { uid } from './model';
+import { uid, calloutLet } from './model';
 import { generate, bibPath, extractCitationKeys } from './generate';
 import { renderSvg, renderPdf } from './typst';
 import { TEMPLATES, TEMPLATE_ICONS } from './templates';
@@ -841,9 +841,19 @@ function applyDoc(data: SavedDoc): void {
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
   editor.commands.setContent(data.content as never);
+  ensureCalloutLet();
   syncJustify(); syncColumns(); syncNumbering(); syncBibliography(); syncPageMetrics();
   renderRibbon();
   schedulePreview();
+}
+
+/** Make the built-in callout a visible definition when the document uses it but
+ *  has no callout binding yet (legacy docs / templates seeded before this). */
+function ensureCalloutLet(): void {
+  if (logic.lets.some((l) => l.name === 'callout')) return;
+  let used = false;
+  editor.state.doc.descendants((n) => { if (n.type.name === 'callout') used = true; });
+  if (used) logic.lets = [calloutLet(), ...logic.lets];
 }
 
 const DOC_FILTERS = [{ name: 'Typst', extensions: ['typ'] }, { name: 'Typst WYSIWYG', extensions: ['typwys', 'json'] }];
@@ -1006,6 +1016,7 @@ function openTemplateModal(): void {
         logic = made.logic;
         clearAssets();
         editor.commands.setContent(made.content as never);
+        ensureCalloutLet();
       });
       grid.append(card);
     }
@@ -1060,7 +1071,7 @@ function openDefinitionsModal(): void {
   const add = el('button', { class: 'primary' }, '+ Add definition');
   add.onclick = () => { logic.lets.push({ id: uid('let'), name: `var${logic.lets.length + 1}`, kind: 'value', code: '""' }); draw(); schedulePreview(); };
   modal.append(
-    el('div', { class: 'modal-head' }, el('h3', {}, 'Definitions · #let'), el('div', { class: 'muted' }, 'Reusable values and components for power users.')),
+    el('div', { class: 'modal-head' }, el('h3', {}, 'Definitions · #let'), el('div', { class: 'muted' }, 'Every #let in the document — values, components and built-ins like callout. Edits round-trip with the file.')),
     list,
     el('div', { class: 'modal-foot' }, add, doneBtn()),
   );
@@ -1071,6 +1082,26 @@ function openDefinitionsModal(): void {
 function letRow(b: LetBinding, redraw: () => void): HTMLElement {
   const box = el('div', { class: 'def' });
   const head = el('div', { class: 'bhead' });
+
+  // Raw bindings (e.g. the built-in callout, or imported defs) are kept verbatim:
+  // the whole statement is editable, the name is fixed and reads from the code.
+  if (b.kind === 'raw') {
+    head.append(el('strong', { class: 'def-name' }, b.name || 'definition'));
+    if (b.name === 'callout') head.append(el('span', { class: 'tag' }, 'built-in'));
+    head.append(el('span', { class: 'muted' }, 'raw #let'), el('span', { class: 'spacer' }));
+    if (b.name !== 'callout') {
+      const del = el('button', { title: 'Delete' }, '✕');
+      del.onclick = () => { logic.lets = logic.lets.filter((x) => x !== b); redraw(); schedulePreview(); };
+      head.append(del);
+    }
+    box.append(head);
+    const code = el('textarea', { rows: '6' }) as HTMLTextAreaElement;
+    code.value = b.code;
+    code.oninput = () => { b.code = code.value; schedulePreview(); };
+    box.append(code);
+    return box;
+  }
+
   const name = txtInput(b.name, (v) => (b.name = v)); name.style.width = '120px';
   const kind = el('select', {}) as HTMLSelectElement;
   for (const k of ['value', 'component'] as const) {
@@ -1342,4 +1373,5 @@ if (restored) {
   if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
 }
 mountEditor((restored?.content ?? initial.content) as object);
+ensureCalloutLet();
 renderRibbon();

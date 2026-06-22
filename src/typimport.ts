@@ -7,7 +7,7 @@
 //     parsed. Anything unrecognized is preserved verbatim as a raw-Typst block.
 
 import type { DocLogic, LetBinding, PageSize, ShowRule, ShowTarget } from './model';
-import { uid } from './model';
+import { uid, CALLOUT_LET_ID, calloutLet } from './model';
 
 export const STATE_MARKER = '// typst-wysiwyg-state (base64, do not edit): ';
 
@@ -436,21 +436,43 @@ function parseLets(text: string): LetBinding[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const [, name, params, rhs] = m;
-    if (name === 'callout') continue; // the built-in component
+    const rhsStart = m.index + m[0].length - rhs.length;
     if (params) {
-      // component: grab the (possibly multi-line) body
-      let body = rhs.trim();
-      if (body.startsWith('{') || body.startsWith('block(')) {
-        const open = text.indexOf(body[0], m.index + m[0].length - rhs.length);
-        const r = readBalancedFrom(text, open, body[0], body[0] === '{' ? '}' : ')');
-        body = r.content.trim();
+      const body = rhs.trim();
+      if (body.startsWith('{')) {
+        // component with a `{ … }` body — keep the structured form.
+        const open = text.indexOf('{', rhsStart);
+        const inner = readBalancedFrom(text, open, '{', '}').content.trim();
+        lets.push({ id: uid('let'), name, kind: 'component', code: inner });
+      } else {
+        // Any other shape (e.g. callout's `block(…)[#body]`) is kept verbatim so
+        // it round-trips exactly, including custom edits.
+        const id = name === 'callout' ? CALLOUT_LET_ID : uid('let');
+        lets.push({ id, name, kind: 'raw', code: readLetStatement(text, m.index, rhsStart) });
       }
-      lets.push({ id: uid('let'), name, kind: 'component', code: body });
     } else {
       lets.push({ id: uid('let'), name, kind: 'value', code: rhs.trim() });
     }
   }
   return lets;
+}
+
+/** Capture a whole `#let … = <expr>` statement, following the expression across
+ *  lines until a newline at bracket/paren depth 0 (handles block(...)[...]). */
+function readLetStatement(text: string, letStart: number, rhsStart: number): string {
+  let i = rhsStart;
+  while (i < text.length && /[ \t]/.test(text[i])) i++;
+  let depth = 0;
+  let inStr = false;
+  for (; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === '\n' && depth <= 0) break;
+  }
+  return text.slice(letStart, i).trim();
 }
 
 function parseSelector(sel: string): { target: ShowTarget; level: number | null; customSelector?: string } {
@@ -515,6 +537,18 @@ export function importTypst(text: string): { logic: DocLogic; content: object } 
     preamble = lines.slice(0, i).join('\n');
     contentText = lines.slice(i).join('\n');
   }
-  const logic: DocLogic = { style: parseStyle(preamble), lets: parseLets(preamble), shows: parseShows(preamble) };
-  return { logic, content: parseContent(contentText) };
+  const content = parseContent(contentText);
+  const lets = parseLets(preamble);
+  // Seed the built-in callout when the body uses it but no definition was found,
+  // so it stays visible/editable and survives the next save.
+  if (usesCallout(content) && !lets.some((l) => l.name === 'callout')) lets.unshift(calloutLet());
+  const logic: DocLogic = { style: parseStyle(preamble), lets, shows: parseShows(preamble) };
+  return { logic, content };
+}
+
+/** Whether a parsed content tree contains a callout node. */
+function usesCallout(node: { type?: string; content?: unknown[] }): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (node.type === 'callout') return true;
+  return Array.isArray(node.content) && node.content.some((c) => usesCallout(c as typeof node));
 }
