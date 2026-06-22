@@ -54,7 +54,7 @@ const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
 const loadZoomPct = (k: string): number => { const n = parseInt(localStorage.getItem(k) || '', 10); return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; };
 let editorZoomPct = loadZoomPct(ZOOM_EDITOR_KEY);
 let previewZoomPct = loadZoomPct(ZOOM_PREVIEW_KEY);
-type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code';
+type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code' | 'reference';
 let activeTab: TabId = 'home';
 let editor!: Editor;
 
@@ -359,6 +359,7 @@ function visibleTabs(): { id: TabId; label: string; ctx?: boolean }[] {
   if (editor?.isActive('table')) tabs.push({ id: 'table', label: 'Table', ctx: true });
   if (editor?.isActive('columns')) tabs.push({ id: 'columns', label: 'Columns', ctx: true });
   if (editor?.isActive('codeListing')) tabs.push({ id: 'code', label: 'Code', ctx: true });
+  if (editor?.isActive('reference')) tabs.push({ id: 'reference', label: 'Reference', ctx: true });
   return tabs;
 }
 
@@ -371,6 +372,9 @@ function syncContextualTabs(): void {
   else if (!onImage && activeTab === 'image') activeTab = 'home';
   if (onCode && activeTab !== 'code') activeTab = 'code'; // selecting a code listing jumps to its tab
   else if (!onCode && activeTab === 'code') activeTab = 'home';
+  const onRef = editor.isActive('reference');
+  if (onRef && activeTab !== 'reference') activeTab = 'reference'; // selecting a reference jumps to its tab
+  else if (!onRef && activeTab === 'reference') activeTab = 'home';
   if (!inTable && activeTab === 'table') activeTab = 'home';
   if (!editor.isActive('columns') && activeTab === 'columns') activeTab = 'home';
   renderRibbon();
@@ -661,6 +665,9 @@ function ribbonGroups(): Node[] {
         group('Style',
           rbtn('▢', 'Border', () => updateImage({ border: !at.border }), !!at.border),
         ),
+        group('Label',
+          rfield('Figure label', attrInput((at.label as string) || '', (v) => updateImage({ label: v || null }), 'fig:name')),
+        ),
         group('Arrange',
           rbtn('✕', 'Delete', () => cmd((c) => c.deleteSelection())),
         ),
@@ -687,6 +694,10 @@ function ribbonGroups(): Node[] {
           borderBtn('horizontal', '☰', 'Rows'),
           borderBtn('none', '▢', 'None'),
         ),
+        group('Figure',
+          rfield('Caption', attrInput((at.caption as string) || '', (v) => updateTable({ caption: v || null }), 'caption')),
+          rfield('Label', attrInput((at.label as string) || '', (v) => updateTable({ label: v || null }), 'tab:name')),
+        ),
         group('Table',
           rbtn('✕', 'Delete', () => cmd((c) => c.deleteTable())),
         ),
@@ -711,6 +722,22 @@ function ribbonGroups(): Node[] {
           langBtn('rust', 'Rs'), langBtn('typ', 'Typ'), langBtn('text', 'Txt'),
         ),
         group('Block', rbtn('✕', 'Delete', () => cmd((c) => c.deleteNode('codeListing')))),
+      ];
+    }
+    case 'reference': {
+      const target = (editor.getAttributes('reference').target as string) || '';
+      const labels = documentLabels();
+      if (target && !labels.includes(target)) labels.unshift(target);
+      const sel = el('select', {}) as HTMLSelectElement;
+      if (!labels.length) sel.append(el('option', { value: '' }, '(no labels yet)'));
+      for (const l of labels) { const o = el('option', { value: l }, l); if (l === target) o.selected = true; sel.append(o); }
+      sel.onchange = () => cmd((c) => c.updateAttributes('reference', { target: sel.value }));
+      return [
+        group('Points to', rfield('Label', sel)),
+        group('Reference',
+          rbtn('→', 'Go to target', () => gotoLabel(target)),
+          rbtn('✕', 'Delete', () => cmd((c) => c.deleteSelection())),
+        ),
       ];
     }
   }
@@ -783,6 +810,27 @@ function updateTable(attrs: Record<string, unknown>): void {
   editor.chain().focus().updateAttributes('table', attrs).run();
   renderRibbon();
   schedulePreview();
+}
+
+/** Every label defined in the document (headings, figures) plus bib keys —
+ *  the valid targets a cross-reference can point at. */
+function documentLabels(): string[] {
+  const out = new Set<string>();
+  editor.state.doc.descendants((n) => {
+    const l = n.attrs?.label;
+    if (typeof l === 'string' && l) out.add(l);
+  });
+  if (logic.bibliography?.content.trim()) for (const k of extractCitationKeys(logic.bibliography)) out.add(k);
+  return [...out];
+}
+
+/** Move the cursor to the element a reference points at. */
+function gotoLabel(target: string): void {
+  if (!target) return;
+  let found = -1;
+  editor.state.doc.descendants((n, pos) => { if (found < 0 && n.attrs?.label === target) found = pos; });
+  if (found >= 0) editor.chain().focus().setTextSelection(found + 1).scrollIntoView().run();
+  else alert(`No element labelled “${target}” in the document.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,6 +1083,14 @@ function txtInput(value: string, on: (v: string) => void, placeholder = '', widt
   const i = el('input', { type: 'text', placeholder }) as HTMLInputElement;
   i.value = value; i.style.width = `${width}px`;
   i.oninput = () => { on(i.value); schedulePreview(); };
+  return i;
+}
+/** Like txtInput but commits on change (blur/Enter) — for fields whose handler
+ *  re-renders the ribbon (which would otherwise steal focus mid-keystroke). */
+function attrInput(value: string, on: (v: string) => void, placeholder = '', width = 110): HTMLInputElement {
+  const i = el('input', { type: 'text', placeholder }) as HTMLInputElement;
+  i.value = value; i.style.width = `${width}px`;
+  i.onchange = () => on(i.value.trim());
   return i;
 }
 let fontDatalist: HTMLDataListElement | null = null;
