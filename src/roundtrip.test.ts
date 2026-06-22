@@ -244,6 +244,22 @@ See @t.`;
     expect(cycle(first.typ).typ).toBe(first.typ);
   });
 
+  it('preserves table styling args (column widths, align, stroke)', () => {
+    const src = `#table(
+  columns: (6em, auto),
+  align: (left, right),
+  stroke: 0.5pt + rgb("#cccccc"),
+  [Planet], [Distance],
+  [Mercury], [57.9],
+)`;
+    const first = cycle(src);
+    expect(first.typ).toContain('columns: (6em, auto)');
+    expect(first.typ).toContain('align: (left, right)');
+    expect(first.typ).toContain('stroke: 0.5pt + rgb("#cccccc")');
+    expect(first.typ).toContain('[Mercury]'); // cells still structured/editable
+    expect(cycle(first.typ).typ).toBe(first.typ); // idempotent
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

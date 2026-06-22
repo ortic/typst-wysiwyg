@@ -172,14 +172,16 @@ function parseInline(s: string): PMInline[] {
 function parseTableInner(inner: string): object | null {
   const args = splitTopLevel(inner, ',').map((a) => a.trim()).filter(Boolean);
   let columns = 0;
+  const styleArgs: string[] = []; // columns/align/stroke/… kept verbatim
   const cells: { content: string; header: boolean }[] = [];
   for (const arg of args) {
     if (arg.startsWith('columns:')) {
       const spec = arg.slice(8).trim();
       if (/^\d+$/.test(spec)) columns = parseInt(spec);
       else if (spec.startsWith('(')) columns = splitTopLevel(readBalancedFrom(spec, 0, '(', ')').content, ',').filter((s) => s.trim()).length;
-    } else if (/^(stroke|inset|fill|align|gutter):/.test(arg)) {
-      // styling — ignored on import
+      styleArgs.push(arg);
+    } else if (/^[A-Za-z_-]+:/.test(arg)) {
+      styleArgs.push(arg); // any other keyword arg (stroke/inset/fill/align/gutter/…)
     } else if (arg.startsWith('table.header(')) {
       const inner2 = readBalancedFrom(arg, arg.indexOf('('), '(', ')').content;
       for (const cell of splitTopLevel(inner2, ',')) {
@@ -202,7 +204,7 @@ function parseTableInner(inner: string): object | null {
     }));
     if (rowCells.length) rows.push({ type: 'tableRow', content: rowCells });
   }
-  return { type: 'table', content: rows };
+  return { type: 'table', attrs: { rawArgs: styleArgs.join(', ') }, content: rows };
 }
 
 // --- block parsing ----------------------------------------------------------

@@ -113,6 +113,19 @@ const StyledTable = Table.extend({
         parseHTML: (el) => el.getAttribute('data-borders') || 'all',
         renderHTML: (attrs) => ({ 'data-borders': attrs.borders }),
       },
+      // Original #table(...) styling args (columns/align/stroke/…), kept verbatim
+      // for imported tables so re-saving doesn't reset them to the editor's style.
+      rawArgs: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-raw-args') || null,
+        renderHTML: (attrs) => (attrs.rawArgs ? { 'data-raw-args': attrs.rawArgs } : {}),
+      },
+      // Caption when the table was written as #figure(table(...), caption: […]).
+      caption: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-caption') || null,
+        renderHTML: (attrs) => (attrs.caption ? { 'data-caption': attrs.caption } : {}),
+      },
     };
   },
 });

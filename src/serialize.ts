@@ -224,22 +224,23 @@ function serializeTable(node: PMNode): string {
   const headerFirst = isHeaderRow(rows[0]);
   const striped = node.attrs.striped as boolean;
   const borders = (node.attrs.borders as string) || 'all';
+  const rawArgs = node.attrs.rawArgs as string | null;
 
-  const stroke =
-    borders === 'none' ? 'none'
-    : borders === 'horizontal' ? '(x: none, y: 0.5pt + rgb("#cdd2dc"))'
-    : '0.5pt + rgb("#cdd2dc")';
-
-  // Styling chosen to match the editor: borders, the same cell padding, a gray
-  // fill behind a bold header row, and optional zebra striping.
-  const lines: string[] = [
-    `#table(`,
-    `  columns: ${tableColumns(rows[0])},`,
-    `  stroke: ${stroke},`,
-    `  inset: (x: 8pt, y: 5pt),`,
-  ];
-  const fill = tableFill(headerFirst, striped);
-  if (fill) lines.push(`  fill: ${fill},`);
+  const lines: string[] = [`#table(`];
+  if (rawArgs) {
+    // Imported table: re-emit its original styling args verbatim.
+    lines.push(`  ${rawArgs},`);
+  } else {
+    // Editor-created table: borders, the same cell padding, a gray fill behind a
+    // bold header row, and optional zebra striping.
+    const stroke =
+      borders === 'none' ? 'none'
+      : borders === 'horizontal' ? '(x: none, y: 0.5pt + rgb("#cdd2dc"))'
+      : '0.5pt + rgb("#cdd2dc")';
+    lines.push(`  columns: ${tableColumns(rows[0])},`, `  stroke: ${stroke},`, `  inset: (x: 8pt, y: 5pt),`);
+    const fill = tableFill(headerFirst, striped);
+    if (fill) lines.push(`  fill: ${fill},`);
+  }
 
   rows.forEach((row, ri) => {
     const header = isHeaderRow(row);
