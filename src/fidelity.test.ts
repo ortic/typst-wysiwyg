@@ -5,20 +5,24 @@
 // import → generate a baseline, then make one tiny content edit and assert the
 // regenerated .typ differs from the baseline on exactly the edited line.
 
-import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { getSchema } from '@tiptap/core';
 import { Node as PMNode } from '@tiptap/pm/model';
 import { buildExtensions } from './editor';
 import { generate } from './generate';
 import { importTypst } from './typimport';
+import appreciatedLetter from './fixtures/appreciated-letter.typ?raw';
+import wonderousBook from './fixtures/wonderous-book.typ?raw';
+import unequivocalAms from './fixtures/unequivocal-ams.typ?raw';
+import chargedIeee from './fixtures/charged-ieee.typ?raw';
 
 const schema = getSchema(buildExtensions([]));
-const FIXTURES = ['appreciated-letter', 'wonderous-book', 'unequivocal-ams', 'charged-ieee'];
-
-function readFixture(name: string): string {
-  return readFileSync(new URL(`./fixtures/${name}.typ`, import.meta.url), 'utf8');
-}
+const FIXTURES: Record<string, string> = {
+  'appreciated-letter': appreciatedLetter,
+  'wonderous-book': wonderousBook,
+  'unequivocal-ams': unequivocalAms,
+  'charged-ieee': chargedIeee,
+};
 
 type JNode = { type?: string; text?: string; content?: JNode[] };
 
@@ -44,9 +48,8 @@ function findEditableTextNode(content: JNode): JNode | null {
 const SENTINEL = 'SENTINELxEDITxMARKERx42';
 
 describe('fidelity (real templates)', () => {
-  for (const name of FIXTURES) {
+  for (const [name, src] of Object.entries(FIXTURES)) {
     describe(name, () => {
-      const src = readFixture(name);
       const model = importTypst(src);
       const baseline = generate(model.logic, PMNode.fromJSON(schema, model.content));
 

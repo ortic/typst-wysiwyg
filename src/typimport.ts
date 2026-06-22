@@ -483,18 +483,36 @@ function parseSelector(sel: string): { target: ShowTarget; level: number | null;
   return { target: 'custom', level: null, customSelector: s };
 }
 
+/** Split `#show <selector>: <rule>` at the colon that separates selector from
+ *  rule — i.e. the one at bracket depth 0, not a `:` inside `where(level: 1)`. */
+function splitShowRule(line: string): { selector: string; rhs: string } | null {
+  const m = line.match(/^#show(\s+)/);
+  if (!m) return null; // not a "#show <sel>: …" rule (e.g. the "#show: f" form)
+  let depth = 0;
+  let inStr = false;
+  for (let k = m[0].length; k < line.length; k++) {
+    const c = line[k];
+    if (inStr) { if (c === '\\') k++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === ':' && depth === 0) return { selector: line.slice(m[0].length, k).trim(), rhs: line.slice(k + 1).trim() };
+  }
+  return null;
+}
+
 function parseShows(text: string): ShowRule[] {
   const shows: ShowRule[] = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^#show\s+(.*?):\s*(.*)$/);
-    if (!m) continue;
-    const sel = parseSelector(m[1]);
+    const split = splitShowRule(lines[i]);
+    if (!split) continue;
+    const sel = parseSelector(split.selector);
     const base: ShowRule = {
       id: uid('show'), target: sel.target, customSelector: sel.customSelector, level: sel.level, kind: 'style',
       props: { fill: '', sizePt: null, weight: 'inherit', style: 'inherit' },
     };
-    const rhs = m[2].trim();
+    const rhs = split.rhs;
     if (rhs.startsWith('it =>') || rhs.startsWith('it=>')) {
       base.kind = 'function';
       const braceIdx = lines.slice(i).join('\n').indexOf('{', lines[i].indexOf(rhs));
@@ -563,33 +581,54 @@ function parseExtra(text: string): string[] {
   return extra;
 }
 
+/** Block-level code statements that belong to the logic layer wherever they
+ *  appear (Typst lets code and markup interleave; we route code to logic). */
+const CODE_STMT = /^\s*#(let|set|show|import|include|bibliography)\b/;
+
+/**
+ * Walk a .typ document once and separate top-level code statements from markup,
+ * without relying on any marker comment. Multi-line statements are kept whole
+ * via balanced scanning; standalone comments (our scaffolding or stray ones)
+ * are dropped; inline `#…` inside paragraphs stays with the markup.
+ */
+function scanTopLevel(src: string): { code: string; markup: string } {
+  const lines = src.split('\n');
+  const code: string[] = [];
+  const markup: string[] = [];
+  let inBlockComment = false;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (inBlockComment) { if (line.includes('*/')) inBlockComment = false; i++; continue; }
+    if (/^\s*\/\//.test(line)) { i++; continue; }                 // standalone line comment
+    if (/^\s*\/\*/.test(line)) { if (!line.includes('*/')) inBlockComment = true; i++; continue; }
+    if (CODE_STMT.test(line)) {
+      let buf = line;
+      let j = i;
+      while (!isBalanced(buf) && j + 1 < lines.length) buf += '\n' + lines[++j];
+      if (isBalanced(buf)) { code.push(buf); i = j + 1; continue; }
+      // Malformed statement that never balances: keep just this line as code so a
+      // broken line can't swallow the rest of the document.
+      code.push(line);
+      i++;
+      continue;
+    }
+    markup.push(line);
+    i++;
+  }
+  return { code: code.join('\n'), markup: markup.join('\n') };
+}
+
 /** Best-effort import of a plain .typ document. */
 export function importTypst(text: string): { logic: DocLogic; content: object } {
-  const marker = '// --- content ---';
-  const ci = text.lastIndexOf(marker);
-  let preamble: string;
-  let contentText: string;
-  if (ci >= 0) {
-    preamble = text.slice(0, ci);
-    contentText = text.slice(ci + marker.length);
-  } else {
-    const lines = text.split('\n');
-    let i = 0;
-    while (i < lines.length) {
-      const t = lines[i].trim();
-      if (t === '' || t.startsWith('//') || t.startsWith('#set ') || t.startsWith('#import ') || t.startsWith('#show ') || t.startsWith('#let ')) i++;
-      else break;
-    }
-    preamble = lines.slice(0, i).join('\n');
-    contentText = lines.slice(i).join('\n');
-  }
-  const content = parseContent(contentText);
-  const lets = parseLets(preamble);
+  const { code, markup } = scanTopLevel(text);
+  const content = parseContent(markup);
+  const lets = parseLets(code);
   // Seed the built-in callout when the body uses it but no definition was found,
   // so it stays visible/editable and survives the next save.
   if (usesCallout(content) && !lets.some((l) => l.name === 'callout')) lets.unshift(calloutLet());
-  const extra = parseExtra(preamble);
-  const logic: DocLogic = { style: parseStyle(preamble), lets, shows: parseShows(preamble) };
+  const extra = parseExtra(code);
+  const logic: DocLogic = { style: parseStyle(code), lets, shows: parseShows(code) };
   if (extra.length) logic.extra = extra;
   return { logic, content };
 }

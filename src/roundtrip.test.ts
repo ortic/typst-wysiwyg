@@ -190,6 +190,33 @@ Body text.`;
     expect(second.logic.extra).toEqual(first.logic.extra);
   });
 
+  it('round-trips a #show rule whose selector contains a colon', () => {
+    const src = `#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"), weight: "bold")
+
+= Title
+Body.`;
+    const parsed = importTypst(src) as { logic: DocLogic; content: object };
+    expect(parsed.logic.shows).toEqual([
+      expect.objectContaining({
+        target: 'heading', level: 1,
+        props: expect.objectContaining({ fill: '#1c7ed6', weight: 'bold' }),
+      }),
+    ]);
+    const typ = generate(parsed.logic, PMNode.fromJSON(schema, parsed.content));
+    expect(typ).toContain('#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"), weight: "bold")');
+  });
+
+  it('a malformed, never-balancing statement cannot swallow the document', () => {
+    const src = `#show heading.where(level: set text(
+
+= Title
+Body paragraph here.`;
+    const parsed = importTypst(src) as { content: { content: { type: string }[] } };
+    const types = parsed.content.content.map((b) => b.type);
+    expect(types).toContain('heading');
+    expect(types).toContain('paragraph');
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');
