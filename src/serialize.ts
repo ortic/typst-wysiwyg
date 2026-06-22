@@ -143,8 +143,18 @@ function serializeBlock(node: PMNode): string {
       const inner = childrenBlocks(node).join('\n\n');
       return `#columns(${(node.attrs.count as number) ?? 2})[\n${indentLines(inner, '  ')}\n]`;
     }
-    case 'table':
-      return serializeTable(node);
+    case 'table': {
+      const table = serializeTable(node);
+      const caption = node.attrs.caption as string | null;
+      const label = node.attrs.label as string | null;
+      if (!caption && !label) return table;
+      // Captioned/labelled table → #figure(table(…), caption: […]) <label>.
+      // Inside #figure(...) the arg is code mode, so drop the leading `#`.
+      const indented = table.replace(/^#/, '').split('\n').map((l) => '  ' + l).join('\n');
+      const cap = caption ? `,\n  caption: [${escapeMarkup(caption)}]` : '';
+      const fig = `#figure(\n${indented}${cap},\n)`;
+      return label ? `${fig} <${label}>` : fig;
+    }
     case 'image': {
       const path = (node.attrs.path as string) || (node.attrs.src as string) || '';
       if (!path || path.startsWith('data:')) return ''; // need a real VFS path

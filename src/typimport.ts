@@ -174,6 +174,7 @@ function parseInline(s: string): PMInline[] {
 function parseTableInner(inner: string): object | null {
   const args = splitTopLevel(inner, ',').map((a) => a.trim()).filter(Boolean);
   let columns = 0;
+  let ok = true; // false when we hit a positional arg we can't model as a cell
   const styleArgs: string[] = []; // columns/align/stroke/… kept verbatim
   const cells: { content: string; header: boolean }[] = [];
   for (const arg of args) {
@@ -189,15 +190,22 @@ function parseTableInner(inner: string): object | null {
       for (const cell of splitTopLevel(inner2, ',')) {
         const c = cell.trim();
         if (c.startsWith('[')) cells.push({ content: readBalancedFrom(c, 0, '[', ']').content, header: true });
+        else if (c) ok = false;
       }
     } else if (arg.startsWith('[')) {
       cells.push({ content: readBalancedFrom(arg, 0, '[', ']').content, header: false });
     } else if (arg.startsWith('table.cell')) {
       const br = arg.indexOf('[');
       if (br >= 0) cells.push({ content: readBalancedFrom(arg, br, '[', ']').content, header: false });
+      else ok = false;
+    } else {
+      // A positional arg we don't understand (bare $math$, table.header[…],
+      // table.hline()…). Bail so the caller keeps the table as a raw block
+      // rather than silently dropping cells.
+      ok = false;
     }
   }
-  if (!columns || !cells.length) return null;
+  if (!columns || !cells.length || !ok) return null;
   const rows: object[] = [];
   for (let r = 0; r < cells.length; r += columns) {
     const rowCells = cells.slice(r, r + columns).map((c) => {
@@ -255,6 +263,21 @@ function parseImageBlock(text: string): object | null {
     type: 'image',
     attrs: { src: imagePlaceholder(path), path, width: width ? parseFloat(width[1]) : 80, border, alt, label },
   };
+}
+
+/** Parse `#figure(table(…), caption: …) <label>` into a captioned table node. */
+function parseFigureTable(text: string): object | null {
+  const ti = text.indexOf('table(');
+  if (ti < 0) return null;
+  const inner = readBalancedFrom(text, text.indexOf('(', ti), '(', ')').content;
+  const node = parseTableInner(inner) as { attrs?: Record<string, unknown> } | null;
+  if (!node) return null;
+  node.attrs = {
+    ...(node.attrs ?? {}),
+    caption: parseCaption(text) || null,
+    label: text.match(/<([\w:.-]+)>\s*$/)?.[1] ?? null,
+  };
+  return node;
 }
 
 /** A figure `caption:` value, whether written as `[content]` or a "string". */
@@ -379,8 +402,9 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
       continue;
     }
 
-    // #image / #figure / bordered #box[#image …] — structure into image nodes.
-    // Read the full (possibly multi-line) construct first, then decide.
+    // #image / #figure / bordered #box[#image …] — structure into image nodes,
+    // or #figure(table(…)) into a captioned table. Read the full (possibly
+    // multi-line) construct first, then decide.
     if (/^#(?:image|figure|box)\b/.test(t)) {
       let j = i, combined = '', depthP = 0, depthB = 0;
       do {
@@ -391,10 +415,10 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
         }
         j++;
       } while (j < lines.length && (depthP > 0 || depthB > 0));
-      if (combined.includes('image(')) {
-        const node = parseImageBlock(combined);
-        if (node) { blocks.push(node); i = j; continue; }
-      }
+      const node = combined.includes('image(') ? parseImageBlock(combined)
+        : t.startsWith('#figure(') && /\btable\(/.test(combined) ? parseFigureTable(combined)
+        : null;
+      if (node) { blocks.push(node); i = j; continue; }
     }
 
     if (t.startsWith('$')) {

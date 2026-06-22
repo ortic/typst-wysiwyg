@@ -315,6 +315,37 @@ See @fig:sun.`;
     expect(cycle(first.typ).typ).toBe(first.typ); // idempotent
   });
 
+  it('round-trips a captioned, labelled figure table', () => {
+    const src = `#figure(
+  table(columns: 2, table.header([Name], [Value]), [a], [1]),
+  caption: [Data],
+) <tab:d>
+
+See @tab:d.`;
+    const parsed = importTypst(src) as { logic: DocLogic; content: { content: { type: string; attrs?: Record<string, unknown> }[] } };
+    const tbl = parsed.content.content.find((b) => b.type === 'table');
+    expect(tbl, 'figure-wrapped table should import as an editable table').toBeTruthy();
+    expect(tbl!.attrs).toMatchObject({ caption: 'Data', label: 'tab:d' });
+    const typ = generate(parsed.logic, PMNode.fromJSON(schema, parsed.content));
+    expect(typ).toContain('#figure(');
+    expect(typ).toContain('caption: [Data]');
+    expect(typ).toContain('<tab:d>');
+    expect(typ).toContain('#ref(<tab:d>)');
+    expect(typ).toContain('#strong[Name]'); // header bold, not doubled
+    expect(typ).not.toContain('#table('); // inner table is code-mode (no leading #)
+    expect(cycle(typ).typ).toBe(typ); // idempotent
+  });
+
+  it('keeps a complex figure table (bare math cells) as a lossless raw block', () => {
+    const src = `#figure(
+  table(columns: 2, [a], $ x^2 $),
+  caption: [M],
+) <t>`;
+    const parsed = importTypst(src) as { content: { content: { type: string }[] } };
+    // bare $…$ cell can't be modeled → preserved verbatim, not silently dropped
+    expect(parsed.content.content[0].type).toBe('codeBlock');
+  });
+
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');

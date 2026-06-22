@@ -126,6 +126,18 @@ const StyledTable = Table.extend({
         parseHTML: (el) => el.getAttribute('data-raw-args') || null,
         renderHTML: (attrs) => (attrs.rawArgs ? { 'data-raw-args': attrs.rawArgs } : {}),
       },
+      // Caption + label when the table was written as
+      // #figure(table(...), caption: […]) <label>.
+      caption: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-caption') || null,
+        renderHTML: (attrs) => (attrs.caption ? { 'data-caption': attrs.caption } : {}),
+      },
+      label: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-label') || null,
+        renderHTML: (attrs) => (attrs.label ? { 'data-label': attrs.label } : {}),
+      },
     };
   },
 });
