@@ -176,13 +176,17 @@ BibTeX or Hayagriva YAML, cite entries inline), a **code listing** block
 (syntax-highlighted `` ``` `` raw blocks), **user templates**, and a **marker-free,
 structural `.typ` importer**: it parses the whole document in one pass — routing
 code statements (`#let`/`#set`/`#show`/`#import`) to the logic layer wherever they
-appear and turning headings, lists, tables (styling kept verbatim), callouts,
-columns and code listings into editable blocks — and preserves imports and any
-unmodeled preamble verbatim, so loading and re-saving doesn't lose them. It imports
-`#image`/`#figure` as real image nodes with a placeholder preview (a plain `.typ`
-carries no image bytes), keeping the path and caption for re-export. There are
-**golden round-trip serializer tests** and **fidelity tests against real-world
-templates** (`npm test`).
+appear and turning headings (with `<label>`s), **nested** lists, tables (styling
+kept verbatim), callouts, columns and code listings into editable blocks — and
+preserves imports and any unmodeled preamble verbatim, so loading and re-saving
+doesn't lose them. Labels and cross-references use the full Typst `prefix:name`
+convention (`<fig:sun>`, `@fig:sun`). It imports `#image`/`#figure` (single- or
+multi-line) as real image nodes — keeping width, caption and figure `<label>` —
+with a placeholder preview (a plain `.typ` carries no image bytes), and
+`#figure(table(…))` as an editable, captioned, labelled table; anything it can't
+model faithfully (e.g. a table with bare `$math$` cells) is kept as a lossless raw
+block rather than corrupted. There are **golden round-trip serializer tests** and
+**fidelity tests against real-world templates** (`npm test`).
 
 Compilation runs in a **Web Worker**, so even large documents never block typing
 or scrolling. The embedded compiler only emits opaque span IDs, not source ranges,
@@ -191,10 +195,11 @@ error offers an **Open Typst source** action that opens the generated `.typ` and
 when the message names an identifier — scrolls to and highlights it (and, where an
 identifier matches a single raw/math block, also offers a jump into the editor).
 
-**Known gaps / next up:** labels and cross-references that use the common
-`prefix:name` convention (`<fig:sun>`, `@fig:sun`) aren't parsed yet; multi-line
-`#figure(image(…))` and `#figure(table(…))` currently import as raw blocks rather
-than editable nodes.
+**Known gaps / next up:** some constructs still import as (lossless) raw blocks
+rather than dedicated editable nodes — block quotes (`#quote`), horizontal rules
+(`#line`), term lists (`/ term:`), and tables whose cells can't be modeled (e.g.
+bare `$math$` cells or `table.header[…]` bracket syntax). `#underline` has no
+editor mark yet, so it's dropped on import.
 
 **Deliberately out of scope:**
 
