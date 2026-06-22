@@ -120,12 +120,6 @@ const StyledTable = Table.extend({
         parseHTML: (el) => el.getAttribute('data-raw-args') || null,
         renderHTML: (attrs) => (attrs.rawArgs ? { 'data-raw-args': attrs.rawArgs } : {}),
       },
-      // Caption when the table was written as #figure(table(...), caption: […]).
-      caption: {
-        default: null,
-        parseHTML: (el) => el.getAttribute('data-caption') || null,
-        renderHTML: (attrs) => (attrs.caption ? { 'data-caption': attrs.caption } : {}),
-      },
     };
   },
 });
