@@ -41,6 +41,18 @@ function callout(...content: J[]): J {
 function raw(code: string): J {
   return { type: 'codeBlock', content: [txt(code)] };
 }
+function th(text: string): J {
+  return { type: 'tableHeader', content: [p(text)] };
+}
+function td(text: string): J {
+  return { type: 'tableCell', content: [p(text)] };
+}
+function tr(...cells: J[]): J {
+  return { type: 'tableRow', content: cells };
+}
+function table(...rows: J[]): J {
+  return { type: 'table', content: rows };
+}
 function doc(...content: J[]): object {
   return { type: 'doc', content };
 }
@@ -115,7 +127,11 @@ function invoice() {
       raw('#align(right)[#text(weight: "bold", size: 14pt)[#company]]'),
       h(1, 'Invoice'),
       p('Invoice #2026-001 · Date: 2026-06-17'),
-      raw('#table(\n  columns: (1fr, auto, auto),\n  [*Item*], [*Qty*], [*Price*],\n  [Consulting], [10], [\\$1,500],\n  [License], [1], [\\$500],\n)'),
+      table(
+        tr(th('Item'), th('Qty'), th('Price')),
+        tr(td('Consulting'), td('10'), td('$1,500')),
+        tr(td('License'), td('1'), td('$500')),
+      ),
       callout(p('Payment due within 30 days.')),
     ),
   };

@@ -162,7 +162,9 @@ select, input[type=text], input[type=number], textarea {
 .page [data-callout] > :last-child { margin-bottom: 0; }
 .page pre { margin: 0 0 .9em; padding: 10px 12px; border-radius: 4px; background: #1e2330; color: #d7dce6;
   font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
-.page pre code { font: inherit; color: inherit; }
+/* The raw block already paints its own dark background; clear the inline-code
+   chip background so text isn't light-gray-on-light-gray (unreadable). */
+.page pre code { font: inherit; color: inherit; background: none; padding: 0; }
 /* code listing: lighter than the raw-Typst block, with a language tag */
 .page pre.doc-listing { position: relative; background: #f6f8fa; color: #24292f; border: 1px solid #d8dee4; }
 .page pre.doc-listing::before { content: attr(data-lang); position: absolute; top: 0; right: 0;
