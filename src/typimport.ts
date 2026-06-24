@@ -7,7 +7,7 @@
 //     parsed. Anything unrecognized is preserved verbatim as a raw-Typst block.
 
 import type { DocLogic, LetBinding, PageSize, ShowRule, ShowTarget } from './model';
-import { uid, CALLOUT_LET_ID, calloutLet } from './model';
+import { uid, CALLOUT_LET_ID, calloutLet, LINK_SHOW_SRC } from './model';
 
 export const STATE_MARKER = '// typst-wysiwyg-state (base64, do not edit): ';
 
@@ -462,6 +462,17 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
       }
     }
 
+    // A paragraph that opens with an inline formatting function — the serializer
+    // emits #strong[…]/#emph[…]/#strike[…]/… (not *…*/_…_) so marks on part of a
+    // word still compile. Parse it as a paragraph rather than freezing the whole
+    // line as a raw block below.
+    if (/^#(?:strong|emph|strike|highlight|underline|link|text|footnote|ref|cite|raw)[([]/.test(t)) {
+      const buf: string[] = [lines[i]]; i++;
+      while (i < lines.length && lines[i].trim() !== '' && !BLOCK_START.test(lines[i].trim())) { buf.push(lines[i]); i++; }
+      blocks.push({ type: 'paragraph', content: parseInline(buf.join(' ')) });
+      continue;
+    }
+
     if (t.startsWith('#') || t.startsWith('$')) {
       const buf: string[] = [];
       while (i < lines.length && lines[i].trim() !== '') { buf.push(lines[i]); i++; }
@@ -628,6 +639,9 @@ function parseShows(text: string): ShowRule[] {
   const shows: ShowRule[] = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
+    // Our own default link styling — keep it invisible (re-emitted by generate),
+    // not a user-editable show rule.
+    if (lines[i].trim() === LINK_SHOW_SRC) continue;
     const split = splitShowRule(lines[i]);
     if (!split) continue;
     const sel = parseSelector(split.selector);

@@ -50,8 +50,12 @@ function applyMarks(text: string, marks: readonly Mark[]): string {
   let highlighted = false;
   for (const m of marks) {
     switch (m.type.name) {
-      case 'bold': t = `*${t}*`; break;
-      case 'italic': t = `_${t}_`; break;
+      // Function form (not *…* / _…_) so it works mid-word too: Typst markup
+      // markers only delimit at word boundaries — a `*` wedged between letters
+      // (e.g. *wor*ld from bolding part of a word) is literal, leaving the
+      // strong unclosed and breaking compilation.
+      case 'bold': t = `#strong[${t}]`; break;
+      case 'italic': t = `#emph[${t}]`; break;
       case 'strike': t = `#strike[${t}]`; break;
       case 'textStyle': if (m.attrs.color) color = m.attrs.color as string; break;
       case 'highlight': highlighted = true; highlight = (m.attrs.color as string) ?? null; break;

@@ -85,6 +85,47 @@ describe('generated Typst', () => {
     expect(typ).toContain('#ref(<results>)');
   });
 
+  it('bolds part of a word with #strong (not *…*, which Typst leaves unclosed)', () => {
+    // Bolding "In" of "Invoice" yields two runs: bold "In" + plain "voice".
+    // *In*voice would be invalid — the closing * sits between letters, so Typst
+    // treats it as literal and never closes the strong. #strong[…] works mid-word.
+    const doc = PMNode.fromJSON(schema, {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'In', marks: [{ type: 'bold' }] },
+          { type: 'text', text: 'voice' },
+        ],
+      }],
+    });
+    const typ = generate({ style: importTypst('').logic.style, lets: [], shows: [] }, doc);
+    expect(typ).toContain('#strong[In]voice');
+    expect(typ).not.toContain('*In*voice');
+    // And it re-imports back to the same split bold/plain runs.
+    const back = importTypst(typ) as { content: { content: { content: object[] }[] } };
+    expect(back.content.content[0].content).toMatchObject([
+      { type: 'text', text: 'In', marks: [{ type: 'bold' }] },
+      { type: 'text', text: 'voice' },
+    ]);
+  });
+
+  it('emits a default link show rule once, invisibly (matches the editor)', () => {
+    const src = `= Hi
+See #link("https://example.com")[the site].`;
+    const first = importTypst(src) as { logic: DocLogic; content: object };
+    // The default is not surfaced as a user-editable show rule.
+    expect(first.logic.shows).toEqual([]);
+    const typ = generate(first.logic, PMNode.fromJSON(schema, first.content));
+    expect(typ).toContain('#show link: it => text(fill: rgb("#2f6fed"))[#underline(it)]');
+    // It appears exactly once and does not accumulate across cycles.
+    const occurrences = typ.split('#show link:').length - 1;
+    expect(occurrences).toBe(1);
+    const second = importTypst(typ) as { logic: DocLogic };
+    expect(second.logic.shows).toEqual([]);
+    expect(generate(second.logic, PMNode.fromJSON(schema, first.content))).toEqual(typ);
+  });
+
   it('serializes code listings as #raw with the language tag', () => {
     const { typ } = cycle(SAMPLES.codeListing);
     expect(typ).toContain('#raw(');

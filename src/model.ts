@@ -57,6 +57,14 @@ export function calloutLet(): LetBinding {
 }
 
 /**
+ * Default link styling so the preview matches the editor (blue + underlined).
+ * Always emitted by `generate`, and skipped on import so it stays an invisible
+ * default rather than a user-editable show rule. Colour matches `.page a` in the
+ * editor CSS (#2f6fed). A user's own `#show link:` rule is kept as usual.
+ */
+export const LINK_SHOW_SRC = '#show link: it => text(fill: rgb("#2f6fed"))[#underline(it)]';
+
+/**
  * A structured #show rule: "when <target> [matches], set these text props".
  * Emits e.g. `#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"))`.
  */
