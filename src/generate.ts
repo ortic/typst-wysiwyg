@@ -3,7 +3,7 @@
 
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { DocLogic, DocStyle, LetBinding, PageSize, ShowRule } from './model';
-import { CALLOUT_SRC, LINK_SHOW_SRC } from './model';
+import { CALLOUT_SRC } from './model';
 import { serializeContent, escapeMarkup } from './serialize';
 
 const PAPER: Record<PageSize, string> = { a4: 'a4', 'us-letter': 'us-letter', a5: 'a5' };
@@ -93,9 +93,6 @@ export function generate(logic: DocLogic, content: PMNode): string {
   }
   parts.push('');
   parts.push(genStyle(logic.style));
-  // Match the editor's link appearance (blue + underlined). A user's own
-  // `#show link:` rule (in logic.shows) layers on top of this default.
-  parts.push(LINK_SHOW_SRC);
   parts.push('');
   // The callout component normally lives in logic.lets (so it's visible and
   // editable). Fall back to the built-in only for legacy documents that use a

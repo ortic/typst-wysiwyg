@@ -7,7 +7,7 @@
 //     parsed. Anything unrecognized is preserved verbatim as a raw-Typst block.
 
 import type { DocLogic, LetBinding, PageSize, ShowRule, ShowTarget } from './model';
-import { uid, CALLOUT_LET_ID, calloutLet, LINK_SHOW_SRC } from './model';
+import { uid, CALLOUT_LET_ID, calloutLet } from './model';
 
 export const STATE_MARKER = '// typst-wysiwyg-state (base64, do not edit): ';
 
@@ -639,9 +639,6 @@ function parseShows(text: string): ShowRule[] {
   const shows: ShowRule[] = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    // Our own default link styling — keep it invisible (re-emitted by generate),
-    // not a user-editable show rule.
-    if (lines[i].trim() === LINK_SHOW_SRC) continue;
     const split = splitShowRule(lines[i]);
     if (!split) continue;
     const sel = parseSelector(split.selector);

@@ -10,6 +10,7 @@ import { Node as PMNode } from '@tiptap/pm/model';
 import { buildExtensions } from './editor';
 import { generate } from './generate';
 import { importTypst } from './typimport';
+import { TEMPLATES } from './templates';
 import type { DocLogic } from './model';
 
 const schema = getSchema(buildExtensions([]));
@@ -110,20 +111,30 @@ describe('generated Typst', () => {
     ]);
   });
 
-  it('emits a default link show rule once, invisibly (matches the editor)', () => {
+  it('seeds an editable link show rule into every template', () => {
+    for (const t of TEMPLATES) {
+      const shows = (t.make() as { logic: DocLogic }).logic.shows;
+      expect(shows.some((s) => s.target === 'link'), `${t.id} has a link rule`).toBe(true);
+    }
+  });
+
+  it('imports a link show rule as an editable function rule that round-trips', () => {
+    // The default link styling (blue + underlined, matching the editor) is a
+    // normal, visible show rule — it must import as an editable `link` function
+    // rule and survive a round-trip without duplicating.
     const src = `= Hi
+#show link: it => {
+  text(fill: rgb("#2f6fed"))[#underline(it)]
+}
 See #link("https://example.com")[the site].`;
-    const first = importTypst(src) as { logic: DocLogic; content: object };
-    // The default is not surfaced as a user-editable show rule.
-    expect(first.logic.shows).toEqual([]);
-    const typ = generate(first.logic, PMNode.fromJSON(schema, first.content));
-    expect(typ).toContain('#show link: it => text(fill: rgb("#2f6fed"))[#underline(it)]');
-    // It appears exactly once and does not accumulate across cycles.
-    const occurrences = typ.split('#show link:').length - 1;
-    expect(occurrences).toBe(1);
-    const second = importTypst(typ) as { logic: DocLogic };
-    expect(second.logic.shows).toEqual([]);
-    expect(generate(second.logic, PMNode.fromJSON(schema, first.content))).toEqual(typ);
+    const first = cycle(src);
+    expect(first.logic.shows).toMatchObject([
+      { target: 'link', kind: 'function', body: 'text(fill: rgb("#2f6fed"))[#underline(it)]' },
+    ]);
+    expect(first.typ.split('#show link:').length - 1).toBe(1); // not duplicated
+    // Re-serializing yields byte-identical Typst (ids are minted fresh per
+    // import, so compare the stable serialized form, not the in-memory ids).
+    expect(cycle(first.typ).typ).toEqual(first.typ);
   });
 
   it('serializes code listings as #raw with the language tag', () => {

@@ -57,14 +57,6 @@ export function calloutLet(): LetBinding {
 }
 
 /**
- * Default link styling so the preview matches the editor (blue + underlined).
- * Always emitted by `generate`, and skipped on import so it stays an invisible
- * default rather than a user-editable show rule. Colour matches `.page a` in the
- * editor CSS (#2f6fed). A user's own `#show link:` rule is kept as usual.
- */
-export const LINK_SHOW_SRC = '#show link: it => text(fill: rgb("#2f6fed"))[#underline(it)]';
-
-/**
  * A structured #show rule: "when <target> [matches], set these text props".
  * Emits e.g. `#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"))`.
  */
@@ -82,6 +74,26 @@ export interface ShowRule {
     sizePt: number | null;
     weight: 'inherit' | 'regular' | 'bold';
     style: 'inherit' | 'normal' | 'italic';
+  };
+}
+
+/** Link colour for the default link show rule — matches `.page a` in editor CSS. */
+export const LINK_COLOR = '#2f6fed';
+
+/**
+ * Default link styling seeded into new documents so the preview matches the
+ * editor (blue + underlined). A normal, user-editable show rule — it appears in
+ * the Show rules modal (target "link", function mode) and can be tweaked or
+ * removed there, not a hidden default.
+ */
+export function linkShow(): ShowRule {
+  return {
+    id: uid('show'),
+    target: 'link',
+    level: null,
+    kind: 'function',
+    body: `text(fill: rgb("${LINK_COLOR}"))[#underline(it)]`,
+    props: { fill: '', sizePt: null, weight: 'inherit', style: 'inherit' },
   };
 }
 

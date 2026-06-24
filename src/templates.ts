@@ -2,7 +2,7 @@
 // Owning a structured model makes the template library trivial data.
 
 import type { DocLogic } from './model';
-import { uid } from './model';
+import { uid, linkShow } from './model';
 
 export type TemplateIcon = 'file' | 'mail' | 'chart' | 'receipt' | 'notes';
 
@@ -68,7 +68,7 @@ function baseStyle(justify: boolean): DocLogic['style'] {
 // --- templates ---------------------------------------------------------------
 function blank() {
   return {
-    logic: { style: baseStyle(true), lets: [], shows: [] },
+    logic: { style: baseStyle(true), lets: [], shows: [linkShow()] },
     content: doc(h(1, 'Untitled document'), p('Start writing here.')),
   };
 }
@@ -78,7 +78,7 @@ function letter() {
     logic: {
       style: { ...baseStyle(false), page: { paper: 'us-letter' as const, marginCm: 3 } },
       lets: [{ id: uid('let'), name: 'sender', kind: 'value' as const, code: '"Ortic AG, Zurich"' }],
-      shows: [],
+      shows: [linkShow()],
     },
     content: doc(
       raw('#align(right)[#sender]'),
@@ -102,6 +102,7 @@ function report() {
           level: 1,
           props: { fill: '#1c7ed6', sizePt: null, weight: 'bold' as const, style: 'inherit' as const },
         },
+        linkShow(),
       ],
     },
     content: doc(
@@ -121,7 +122,7 @@ function invoice() {
     logic: {
       style: baseStyle(false),
       lets: [{ id: uid('let'), name: 'company', kind: 'value' as const, code: '"Ortic AG"' }],
-      shows: [],
+      shows: [linkShow()],
     },
     content: doc(
       raw('#align(right)[#text(weight: "bold", size: 14pt)[#company]]'),
@@ -139,7 +140,7 @@ function invoice() {
 
 function meetingNotes() {
   return {
-    logic: { style: baseStyle(false), lets: [], shows: [] },
+    logic: { style: baseStyle(false), lets: [], shows: [linkShow()] },
     content: doc(
       h(1, 'Meeting Notes'),
       p('Date: 2026-06-17 · Attendees: …'),
