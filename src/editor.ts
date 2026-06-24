@@ -21,6 +21,7 @@ import TextStyle from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import Heading from '@tiptap/extension-heading';
+import { TableColumnSync } from './tablesync';
 
 // Headings can carry a Typst label (`= Title <label>`) referenced by @label.
 const LabeledHeading = Heading.extend({
@@ -324,6 +325,7 @@ export function buildExtensions(slashItems: SlashItem[]) {
     TableRow,
     TableHeader,
     TableCell,
+    TableColumnSync,
     TypstImage.configure({ allowBase64: true }),
     MathBlock,
     MathInline,
