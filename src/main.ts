@@ -15,6 +15,7 @@ import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './de
 import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
 import { STATE_MARKER, extractEmbeddedState, importTypst } from './typimport';
 import { pageConfig, relayoutPages } from './pagination';
+import { showRulesToCss } from './showcss';
 
 // The "/" command menu — insert any block by typing. `pickImage` is referenced
 // before its declaration but only called at runtime, so the hoist is fine.
@@ -89,6 +90,7 @@ let previewTimer: number | undefined;
 
 function schedulePreview(): void {
   scheduleAutosave(); // every change path runs through here
+  applyShowRules();   // keep the editor canvas in sync with #show rule edits
   if (!previewVisible) return;
   window.clearTimeout(previewTimer);
   previewTimer = window.setTimeout(refreshPreview, 300);
@@ -252,9 +254,25 @@ const PAPER_MM: Record<string, { w: number; h: number }> = {
   'us-letter': { w: 215.9, h: 279.4 },
   a5: { w: 148, h: 210 },
 };
+// One <style> element holding the CSS translated from the document's #show
+// rules, so the editor canvas reflects them (see showcss.ts). Appended after the
+// imported styles.css so equal-specificity rules win.
+const showRulesStyle = document.createElement('style');
+showRulesStyle.id = 'show-rules-css';
+document.head.appendChild(showRulesStyle);
+// Editor px per Typst point at the current page scale; kept in sync below so
+// size-based show rules scale the same way the body font does.
+let pxPerPt = 96 / 72;
+
+function applyShowRules(): void {
+  const css = showRulesToCss(logic.shows, pxPerPt);
+  if (css !== showRulesStyle.textContent) showRulesStyle.textContent = css;
+}
+
 function syncPageMetrics(): void {
   const dims = PAPER_MM[logic.style.page.paper] ?? PAPER_MM.a4;
   const scale = SHEET_W / (dims.w * MM_PX);
+  pxPerPt = (96 / 72) * scale;
   const fontPx = logic.style.text.sizePt * (96 / 72) * scale;
   const marginPx = logic.style.page.marginCm * 10 * MM_PX * scale;
   const pageHpx = Math.round(SHEET_W * dims.h / dims.w);
@@ -265,6 +283,7 @@ function syncPageMetrics(): void {
   pageEl.style.setProperty('--page-gutter', `${pageConfig.gutter}px`);
   pageConfig.pageH = pageHpx;
   pageConfig.margin = marginPx;
+  applyShowRules(); // pxPerPt changed → size-based rules need rescaling
   if (editor) relayoutPages(editor.view);
 }
 
