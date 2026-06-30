@@ -5,9 +5,18 @@
 import type { Node as PMNode, Mark } from '@tiptap/pm/model';
 
 /** Escape text for Typst MARKUP mode so it renders literally. Brackets are
- *  escaped too so text never closes a surrounding content block ([...]). */
+ *  escaped too so text never closes a surrounding content block ([...]).
+ *
+ *  Beyond the inline markers (`*`, `_`, `` ` ``, …) we also escape the chars
+ *  that start block constructs at the beginning of a line — `=` (heading),
+ *  `-`/`+` (lists), `/` (term list) — because a text run can land at a line
+ *  start (e.g. after a hard break or when split into its own paragraph) and
+ *  would silently turn into a heading or list item. `-` and `/` are dangerous
+ *  mid-line too: `--`/`---`/`-?` are symbol shorthands (en/em dash, soft
+ *  hyphen) and `//`/`/*` start comments. Escaping them keeps the output
+ *  faithful to what the user typed (WYSIWYG). */
 export function escapeMarkup(s: string): string {
-  return s.replace(/([\\#$*_`<>@~[\]])/g, '\\$1');
+  return s.replace(/([\\#$*_`<>@~[\]=+/-])/g, '\\$1');
 }
 
 function quote(s: string): string {

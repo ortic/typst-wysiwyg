@@ -27,7 +27,7 @@ function defaultStyle(): DocLogic['style'] {
 }
 
 function unescapeMarkup(s: string): string {
-  return s.replace(/\\([\\#$*_`<>@~[\]])/g, '$1');
+  return s.replace(/\\([\\#$*_`<>@~[\]=+/-])/g, '$1');
 }
 
 /** Unescape a Typst string literal's contents (\n, \t, \", \\, …). */
