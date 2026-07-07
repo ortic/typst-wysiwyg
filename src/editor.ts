@@ -9,6 +9,9 @@
 // The codeBlock node doubles as the raw-Typst escape hatch.
 
 import { Editor, Node, mergeAttributes, type Content } from '@tiptap/core';
+import { NodeRange, type NodeType } from '@tiptap/pm/model';
+import type { Selection } from '@tiptap/pm/state';
+import { findWrapping } from '@tiptap/pm/transform';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -284,6 +287,41 @@ export const CodeListing = Node.create({
   },
 });
 
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    callout: {
+      /** Wrap the current block (or the whole enclosing list) in a callout, or lift it back out. */
+      toggleCallout: () => ReturnType;
+    };
+  }
+}
+
+/**
+ * Compute how to wrap the current selection in a callout. Plain
+ * `toggleWrap('callout')` fails inside a list — a callout can't be the first
+ * child of a listItem, so findWrapping() gives up and nothing happens (issue
+ * #7). When the selection sits in a list we wrap the entire enclosing list
+ * instead, yielding `#callout[ - a - b ]` (the same shape as text -> callout ->
+ * list); otherwise we wrap the ordinary block range around the selection.
+ *
+ * Returns null when no legal wrapping exists. Exported for headless testing.
+ */
+export function calloutWrapping(selection: Selection, calloutType: NodeType): { range: NodeRange; wrapping: readonly { type: NodeType }[] } | null {
+  const { $from, $to } = selection;
+  let listDepth: number | null = null;
+  for (let d = $from.depth; d > 0; d--) {
+    const name = $from.node(d).type.name;
+    if (name === 'bulletList' || name === 'orderedList') listDepth = d;
+  }
+  const range = listDepth !== null
+    ? new NodeRange($from, $to, listDepth - 1) // parent of the outermost list
+    : $from.blockRange($to);
+  if (!range) return null;
+  const wrapping = findWrapping(range, calloutType);
+  if (!wrapping) return null;
+  return { range, wrapping };
+}
+
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
@@ -294,6 +332,17 @@ export const Callout = Node.create({
   },
   renderHTML({ HTMLAttributes }) {
     return ['div', mergeAttributes(HTMLAttributes, { 'data-callout': '', class: 'doc-callout' }), 0];
+  },
+  addCommands() {
+    return {
+      toggleCallout: () => ({ state, dispatch, editor, commands }) => {
+        if (editor.isActive('callout')) return commands.lift('callout');
+        const plan = calloutWrapping(state.selection, state.schema.nodes.callout);
+        if (!plan) return false;
+        if (dispatch) dispatch(state.tr.wrap(plan.range, plan.wrapping).scrollIntoView());
+        return true;
+      },
+    };
   },
 });
 
