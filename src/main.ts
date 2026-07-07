@@ -26,7 +26,7 @@ const SLASH_ITEMS: SlashItem[] = [
   { title: 'Text', keywords: 'paragraph body', run: (e) => e.chain().focus().setParagraph().run() },
   { title: 'Bullet list', hint: '-', keywords: 'unordered', run: (e) => e.chain().focus().toggleBulletList().run() },
   { title: 'Numbered list', hint: '1.', keywords: 'ordered', run: (e) => e.chain().focus().toggleOrderedList().run() },
-  { title: 'Callout', keywords: 'note admonition', run: (e) => e.chain().focus().toggleWrap('callout').run() },
+  { title: 'Callout', keywords: 'note admonition', run: (e) => e.chain().focus().toggleCallout().run() },
   { title: 'Table', keywords: 'grid', run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { title: 'Image', keywords: 'picture photo', run: () => pickImage() },
   { title: 'Equation', keywords: 'math block', run: (e) => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { src: 'x^2 + y^2 = z^2' } }).run() },
@@ -592,7 +592,7 @@ function ribbonGroups(): Node[] {
           rbtn('1.', 'Numbered', () => cmd((c) => c.toggleOrderedList()), a.isActive('orderedList')),
         ),
         group('Blocks',
-          rbtn('❝', 'Callout', () => cmd((c) => c.toggleWrap('callout')), a.isActive('callout')),
+          rbtn('❝', 'Callout', () => cmd((c) => c.toggleCallout()), a.isActive('callout')),
           rbtn('</>', 'Raw', () => cmd((c) => c.toggleCodeBlock()), a.isActive('codeBlock')),
         ),
       ];

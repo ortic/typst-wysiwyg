@@ -239,7 +239,7 @@ export function installBlockHandle(editor: Editor, pageEl: HTMLElement): void {
       item('¶', 'Text', () => setType(() => editor.chain().focus().setParagraph().run())),
       item('•', 'Bullet list', () => setType(() => editor.chain().focus().toggleBulletList().run())),
       item('1.', 'Numbered list', () => setType(() => editor.chain().focus().toggleOrderedList().run())),
-      item('❝', 'Callout', () => setType(() => editor.chain().focus().toggleWrap('callout').run())),
+      item('❝', 'Callout', () => setType(() => editor.chain().focus().toggleCallout().run())),
       item('</>', 'Raw Typst', () => setType(() => editor.chain().focus().toggleCodeBlock().run())),
       sep(),
       item('+', 'Insert below', insertBelow),

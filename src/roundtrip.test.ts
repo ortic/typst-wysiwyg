@@ -8,7 +8,10 @@ import { describe, it, expect } from 'vitest';
 import { getSchema } from '@tiptap/core';
 import { Node as PMNode } from '@tiptap/pm/model';
 import { buildExtensions } from './editor';
+import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { generate } from './generate';
+import { calloutWrapping } from './editor';
+import { serializeContent } from './serialize';
 import { importTypst } from './typimport';
 import { TEMPLATES } from './templates';
 import type { DocLogic } from './model';
@@ -422,6 +425,41 @@ See @tab:d.`;
   it('preserves callouts and columns as functions', () => {
     expect(cycle(SAMPLES.callout).typ).toContain('#callout[');
     expect(cycle(SAMPLES.columns).typ).toContain('#columns(2)[');
+  });
+
+  // Regression for issue #7: turning a list item into a callout was a no-op
+  // because a callout can't be the first child of a listItem.
+  it('wraps an enclosing list when a list item is turned into a callout', () => {
+    const list = (kind: 'bulletList' | 'orderedList') => ({
+      type: 'doc',
+      content: [{
+        type: kind,
+        ...(kind === 'orderedList' ? { attrs: { start: 1 } } : {}),
+        content: [
+          { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'first' }] }] },
+          { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'second' }] }] },
+        ],
+      }],
+    });
+
+    for (const kind of ['bulletList', 'orderedList'] as const) {
+      const doc = PMNode.fromJSON(schema, list(kind));
+      let state = EditorState.create({ schema, doc });
+      // Put the cursor inside the first list item's paragraph.
+      state = state.apply(state.tr.setSelection(TextSelection.create(doc, 4)));
+
+      const plan = calloutWrapping(state.selection, schema.nodes.callout);
+      expect(plan).not.toBeNull();
+      const wrapped = state.apply(state.tr.wrap(plan!.range, plan!.wrapping)).doc;
+
+      // The whole list is now nested inside a single callout.
+      expect(wrapped.firstChild!.type.name).toBe('callout');
+      expect(wrapped.firstChild!.firstChild!.type.name).toBe(kind);
+
+      const typ = serializeContent(wrapped);
+      expect(typ).toContain('#callout[');
+      expect(typ).toContain(kind === 'orderedList' ? '+ first' : '- first');
+    }
   });
 
   it('structures figures (keeps the path and caption)', () => {
