@@ -21,21 +21,44 @@ export function installBlockHandle(editor: Editor, pageEl: HTMLElement): void {
   let menu: HTMLElement | null = null;
   const closeMenu = () => { menu?.remove(); menu = null; };
 
-  function currentBlock(): BlockInfo | null {
-    const { selection, doc } = editor.state;
-    const $from = selection.$from;
-    if ($from.depth < 1) return null;
-    const index = $from.index(0);
-    const pos = $from.before(1);
-    const node = doc.child(index);
+  // The block the handle currently points at. Set either from the cursor's
+  // block or — so it shows up without clicking into the text — from the block
+  // under the mouse. Drag/menu actions operate on this block, not the cursor.
+  // hoverY is the last pointer Y over the page; the hovered block is re-derived
+  // from it each reposition so it survives edits/reflow without going stale.
+  let activeInfo: BlockInfo | null = null;
+  let hoverY: number | null = null;
+
+  /** Build a BlockInfo for the i-th top-level block, or null if out of range. */
+  function blockInfoAt(index: number): BlockInfo | null {
+    const { doc } = editor.state;
+    if (index < 0 || index >= doc.childCount) return null;
+    let pos = 0;
+    for (let k = 0; k < index; k++) pos += doc.child(k).nodeSize;
     const dom = editor.view.nodeDOM(pos);
     if (!(dom instanceof HTMLElement)) return null;
-    return { pos, index, node, dom };
+    return { pos, index, node: doc.child(index), dom };
   }
 
-  function reposition(): void {
+  function currentBlock(): BlockInfo | null {
+    const $from = editor.state.selection.$from;
+    if ($from.depth < 1) return null;
+    return blockInfoAt($from.index(0));
+  }
+
+  /** The top-level block whose vertical extent contains clientY, if any. */
+  function blockUnder(clientY: number): BlockInfo | null {
+    const blocks = topBlocks();
+    for (let i = 0; i < blocks.length; i++) {
+      const r = blocks[i].getBoundingClientRect();
+      if (clientY >= r.top && clientY <= r.bottom) return blockInfoAt(i);
+    }
+    return null;
+  }
+
+  function place(info: BlockInfo | null): void {
     if (menu) return; // don't move while the menu is open
-    const info = currentBlock();
+    activeInfo = info;
     if (!info || !editor.isEditable) { handle.style.display = 'none'; return; }
     const pmRect = pageEl.getBoundingClientRect();
     const r = info.dom.getBoundingClientRect();
@@ -44,10 +67,27 @@ export function installBlockHandle(editor: Editor, pageEl: HTMLElement): void {
     handle.style.left = '36px';
   }
 
+  // Hover wins; otherwise follow the cursor (only once the editor is focused,
+  // so it doesn't linger on block 0 before the user has interacted).
+  function reposition(): void {
+    const hovered = hoverY != null ? blockUnder(hoverY) : null;
+    place(hovered ?? (editor.isFocused ? currentBlock() : null));
+  }
+
   editor.on('selectionUpdate', reposition);
   editor.on('transaction', reposition);
   editor.on('focus', reposition);
   editor.on('create', reposition);
+
+  // Reveal the handle next to whatever block the pointer is over, so it can be
+  // grabbed for reordering without first clicking into the text (issue #3).
+  pageEl.addEventListener('mousemove', (e) => {
+    if (menu) return;
+    if (!blockUnder(e.clientY)) return; // in a gap — keep the handle where it was
+    hoverY = e.clientY;
+    reposition();
+  });
+  pageEl.addEventListener('mouseleave', () => { hoverY = null; reposition(); });
 
   // --- drag-to-reorder -----------------------------------------------------
   const indicator = document.createElement('div');
@@ -75,11 +115,18 @@ export function installBlockHandle(editor: Editor, pageEl: HTMLElement): void {
     indicator.style.top = `${y - 1}px`;
   }
 
+  /** Put the cursor inside a block so selection-based commands target it. */
+  function selectBlock(info: BlockInfo): void {
+    const sel = TextSelection.near(editor.state.doc.resolve(info.pos + 1));
+    editor.view.dispatch(editor.state.tr.setSelection(sel));
+    editor.view.focus();
+  }
+
   handle.addEventListener('mousedown', (e) => {
     e.preventDefault();
     e.stopPropagation();
     closeMenu();
-    const info = currentBlock();
+    const info = activeInfo; // the hovered/selected block the handle points at
     if (!info) return;
     const startY = e.clientY;
     let dragging = false;
@@ -96,7 +143,7 @@ export function installBlockHandle(editor: Editor, pageEl: HTMLElement): void {
       indicator.style.display = 'none';
       handle.classList.remove('dragging');
       if (dragging) moveToIndex(info.index, dropIndex);
-      else openMenu(); // a plain click
+      else { selectBlock(info); openMenu(); } // a plain click
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
