@@ -429,4 +429,20 @@ See @tab:d.`;
     expect(typ).toContain('#figure(image("/assets/img1.png", width: 60%)');
     expect(typ).toContain('caption: [A diagram]');
   });
+
+  it('escapes markup characters so they render literally (issue #2)', () => {
+    // Text that, unescaped, would become headings/lists/term-lists, comments
+    // or symbol shorthands (en/em dash, soft hyphen) in the Typst output.
+    const text = '= not a heading - + / // /* */ -- --- -? a/b';
+    const doc = PMNode.fromJSON(schema, {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    });
+    const typ = generate({ style: importTypst('').logic.style, lets: [], shows: [] }, doc);
+    const para = typ.split('\n').find((l) => l.includes('not a heading'))!;
+    expect(para).toBe('\\= not a heading \\- \\+ \\/ \\/\\/ \\/\\* \\*\\/ \\-\\- \\-\\-\\- \\-? a\\/b');
+    // And it re-imports to exactly the original text (round-trip safe).
+    const back = importTypst(typ) as { content: { content: { content: { text: string }[] }[] } };
+    expect(back.content.content[0].content[0].text).toBe(text);
+  });
 });
