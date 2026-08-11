@@ -32,11 +32,14 @@ export async function saveBytesDialog(defaultName: string, filters: FileFilter[]
   return true;
 }
 
-/** Native "Open" for a text file. Returns its contents, or null if cancelled. */
-export async function openTextDialog(filters: FileFilter[]): Promise<string | null> {
+/** Native "Open". Returns the file's raw bytes, or null if cancelled — the
+ *  caller decides whether they are a zip bundle or plain .typ text. */
+export async function openFileDialog(filters: FileFilter[]): Promise<Uint8Array | null> {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const { invoke } = await import('@tauri-apps/api/core');
   const path = await open({ multiple: false, directory: false, filters });
   if (!path || typeof path !== 'string') return null;
-  return await invoke<string>('read_text', { path });
+  // read_binary answers with a raw IPC body, so a big bundle stays an
+  // ArrayBuffer instead of being marshalled as a JSON array of numbers.
+  return new Uint8Array(await invoke<ArrayBuffer>('read_binary', { path }));
 }

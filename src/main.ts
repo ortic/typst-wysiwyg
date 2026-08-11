@@ -9,9 +9,10 @@ import { highlightTypst } from './highlight';
 import { createEditor } from './editor';
 import { installBlockHandle } from './blockhandle';
 import { installBubbleMenu } from './bubble';
-import { addAsset, assets, clearAssets } from './assets';
+import { addAsset, assets, clearAssets, assetDataUrl, bytesToB64, b64ToBytes } from './assets';
+import { isZip, readBundle, buildBundle } from './bundle';
 import type { SlashItem } from './slash';
-import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
+import { isDesktop, saveTextDialog, saveBytesDialog, openFileDialog } from './desktop';
 import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
 import { STATE_MARKER, extractEmbeddedState, importTypst } from './typimport';
 import { pageConfig, relayoutPages } from './pagination';
@@ -954,7 +955,7 @@ function download(name: string, blob: Blob): void {
 }
 
 // ---------------------------------------------------------------------------
-// Persistence: save/open a .typwys file and autosave to localStorage
+// Persistence: save/open a .typ file or .zip bundle, autosave to localStorage
 // ---------------------------------------------------------------------------
 const DOC_VERSION = 1;
 const LS_KEY = 'typst-wysiwyg:doc';
@@ -966,32 +967,40 @@ interface SavedDoc {
   assets: Record<string, string>; // path -> base64
 }
 
-function bytesToB64(bytes: Uint8Array): string {
-  let bin = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(bin);
-}
-function b64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 function currentDoc(): SavedDoc {
   const assetObj: Record<string, string> = {};
   for (const [path, bytes] of assets) assetObj[path] = bytesToB64(bytes);
   return { version: DOC_VERSION, logic, content: editor.getJSON(), assets: assetObj };
 }
 
-function applyDoc(data: SavedDoc): void {
+/** Point image nodes at the bytes we just loaded. A bundle stores media as
+ *  real files rather than data URLs on the node, and an imported .typ carries
+ *  no bytes at all (the importer leaves a placeholder), so both need this. */
+function rehydrateImages(content: unknown): void {
+  const walk = (n: unknown): void => {
+    if (Array.isArray(n)) { n.forEach(walk); return; }
+    if (!n || typeof n !== 'object') return;
+    const node = n as { type?: string; attrs?: Record<string, unknown>; content?: unknown };
+    if (node.type === 'image' && typeof node.attrs?.path === 'string') {
+      const url = assetDataUrl(node.attrs.path);
+      if (url) node.attrs.src = url;
+    }
+    if (node.content) walk(node.content);
+  };
+  walk(content);
+}
+
+/** `rawAssets` (from a zip bundle) are layered over any base64 the state
+ *  carried, so a bundle whose main.typ still has a state trailer works too. */
+function applyDoc(data: SavedDoc, rawAssets?: Map<string, Uint8Array>): void {
   if (!data || typeof data !== 'object' || !data.content) throw new Error('Not a typst-wysiwyg document');
   logic = data.logic;
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
+  if (rawAssets) {
+    for (const [path, bytes] of rawAssets) assets.set(path, bytes);
+    rehydrateImages(data.content);
+  }
   editor.commands.setContent(data.content as never);
   normalizeLogic();
   syncJustify(); syncColumns(); syncNumbering(); syncBibliography(); syncPageMetrics();
@@ -1014,7 +1023,15 @@ function normalizeLogic(): void {
   }
 }
 
-const DOC_FILTERS = [{ name: 'Typst', extensions: ['typ'] }, { name: 'Typst WYSIWYG', extensions: ['typwys', 'json'] }];
+const ZIP_FILTER = { name: 'Typst bundle', extensions: ['zip'] };
+const TYP_FILTER = { name: 'Typst', extensions: ['typ'] };
+// The combined entry goes first so the Open dialog defaults to showing both.
+const DOC_FILTERS = [
+  { name: 'Typst document', extensions: ['typ', 'zip'] },
+  ZIP_FILTER,
+  TYP_FILTER,
+  { name: 'Typst WYSIWYG', extensions: ['typwys', 'json'] },
+];
 
 /** A .typ file: the real Typst source plus the editable state in a comment. */
 function currentTypFile(): string {
@@ -1023,38 +1040,83 @@ function currentTypFile(): string {
   return `${source}\n${STATE_MARKER}${state}\n`;
 }
 
-/** Open document text: restore embedded state, else import the Typst markup. */
-function openDocText(text: string): void {
-  const trimmed = text.trimStart();
-  if (trimmed.startsWith('{')) { applyDoc(JSON.parse(text) as SavedDoc); return; } // legacy .typwys/.json
-  const state = extractEmbeddedState(text);
-  if (state) {
-    const json = new TextDecoder().decode(b64ToBytes(state));
-    applyDoc(JSON.parse(json) as SavedDoc);
-    return;
+/** The assets the generated source actually references. Dropping the ones the
+ *  user deleted along the way keeps a bundle from growing forever. */
+function usedAssets(source: string): Map<string, Uint8Array> {
+  const used = new Map<string, Uint8Array>();
+  // Matching the relative form also covers an absolute `/assets/..` reference.
+  for (const [path, bytes] of assets) {
+    if (source.includes(path.replace(/^\//, ''))) used.set(path, bytes);
   }
-  const imported = importTypst(text);
-  applyDoc({ version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: {} });
+  return used;
 }
 
+/** A zip bundle: clean main.typ, the media as real files, state in a sidecar. */
+function currentBundle(source: string, media: Map<string, Uint8Array>): Uint8Array {
+  // The sidecar holds no bytes — the media is already in the zip beside it.
+  const state = JSON.stringify({ version: DOC_VERSION, logic, content: editor.getJSON(), assets: {} });
+  return buildBundle(source, state, media);
+}
+
+/** Build a document from file text: embedded state, else import the markup. */
+function docFromText(text: string): SavedDoc {
+  if (text.trimStart().startsWith('{')) return JSON.parse(text) as SavedDoc; // legacy .typwys/.json
+  const state = extractEmbeddedState(text);
+  if (state) return JSON.parse(new TextDecoder().decode(b64ToBytes(state))) as SavedDoc;
+  const imported = importTypst(text);
+  return { version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: {} };
+}
+
+function openDocText(text: string): void {
+  applyDoc(docFromText(text));
+}
+
+/** Open a zip: use the state sidecar when present, else import main.typ — but
+ *  either way the media comes from the archive, so the images are the real ones. */
+function openBundle(bytes: Uint8Array): void {
+  const bundle = readBundle(bytes);
+  const doc = bundle.state ? (JSON.parse(bundle.state) as SavedDoc) : docFromText(bundle.typ);
+  applyDoc(doc, bundle.assets);
+}
+
+/** Dispatch on content, not on the file name — a mis-named .typ still opens. */
+function openDocBytes(bytes: Uint8Array): void {
+  if (isZip(bytes)) openBundle(bytes);
+  else openDocText(new TextDecoder().decode(bytes));
+}
+
+/** Save as a zip bundle when the document has media, a plain .typ when it
+ *  doesn't — so text-only documents stay a file you can read in any editor. */
 async function saveToFile(): Promise<void> {
+  const source = generate(logic, editor.state.doc);
+  const media = usedAssets(source);
+  if (media.size) {
+    const zip = currentBundle(source, media);
+    if (isDesktop()) {
+      if (await saveBytesDialog('document.zip', [ZIP_FILTER], zip)) flashSaved();
+    } else {
+      download('document.zip', new Blob([zip as BlobPart], { type: 'application/zip' }));
+      flashSaved();
+    }
+    return;
+  }
   const content = currentTypFile();
   if (isDesktop()) {
-    if (await saveTextDialog('document.typ', DOC_FILTERS, content)) flashSaved();
+    if (await saveTextDialog('document.typ', [TYP_FILTER], content)) flashSaved();
   } else {
     download('document.typ', new Blob([content], { type: 'text/plain' }));
     flashSaved();
   }
 }
 
-const docInput = el('input', { type: 'file', accept: '.typ,.typwys,.json,text/plain' }) as HTMLInputElement;
+const docInput = el('input', { type: 'file', accept: '.typ,.zip,.typwys,.json,text/plain,application/zip' }) as HTMLInputElement;
 docInput.style.display = 'none';
 document.body.appendChild(docInput);
 async function openFromFile(): Promise<void> {
   if (isDesktop()) {
     try {
-      const text = await openTextDialog(DOC_FILTERS);
-      if (text != null) openDocText(text);
+      const bytes = await openFileDialog(DOC_FILTERS);
+      if (bytes) openDocBytes(bytes);
     } catch (e) { alert('Could not open file:\n' + String(e)); }
     return;
   }
@@ -1062,7 +1124,7 @@ async function openFromFile(): Promise<void> {
   docInput.onchange = async () => {
     const file = docInput.files?.[0];
     if (!file) return;
-    try { openDocText(await file.text()); }
+    try { openDocBytes(new Uint8Array(await file.arrayBuffer())); }
     catch (e) { alert('Could not open file:\n' + String(e)); }
   };
   docInput.click();
