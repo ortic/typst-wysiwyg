@@ -33,17 +33,28 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+// The main file is mapped at the VFS root rather than passed as `mainContent`,
+// which would park it in /tmp/<random>.typ. Typst resolves a relative
+// `image("assets/x.png")` against the main file's own directory, so from /tmp
+// it would look outside the project root and fail; from the root it lands on
+// /assets/x.png — exactly the key the asset store uses (see assets.ts). That
+// matters for zip bundles, which routinely carry relative image paths.
+const MAIN_PATH = '/main.typ';
+const FRAGMENT_PATH = '/fragment.typ';
+
 async function handle(req: TypstRequest): Promise<TypstResponse> {
   return enqueue(async () => {
     try {
       init();
       for (const [path, bytes] of req.assets) await $typst.mapShadow(path, bytes);
+      const mainFilePath = req.kind === 'fragment' ? FRAGMENT_PATH : MAIN_PATH;
+      await $typst.addSource(mainFilePath, req.source);
       if (req.kind === 'pdf') {
-        const pdf = await $typst.pdf({ mainContent: req.source });
+        const pdf = await $typst.pdf({ mainFilePath });
         if (!pdf) throw new Error('PDF generation returned no data');
         return { id: req.id, ok: true, pdf } as TypstResponse;
       }
-      const svg = await $typst.svg({ mainContent: req.source });
+      const svg = await $typst.svg({ mainFilePath });
       return { id: req.id, ok: true, svg } as TypstResponse;
     } catch (e) {
       return { id: req.id, ok: false, error: String(e) } as TypstResponse;

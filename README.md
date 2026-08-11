@@ -33,7 +33,9 @@ it can't model — imports, custom `#set` arguments, arbitrary preamble — **ve
 loading and re-saving doesn't quietly drop things.
 
 Save writes a `.typ` that is real Typst source **and** carries the editable state in a
-trailing comment, so the editor's own files round-trip exactly.
+trailing comment, so the editor's own files round-trip exactly. A document with images
+is saved as a **`.zip` bundle** instead — `main.typ` plus the media as real files —
+which keeps the source clean and compiles as-is with the Typst CLI (see below).
 
 ### Two layers
 
@@ -92,6 +94,15 @@ an icon.
   unmodeled (`#import`, custom `#set` args, `#show: template.with(…)`) are preserved
   verbatim. Plus **autosave** to the browser (Ctrl/Cmd+S), and native file dialogs in
   the desktop build.
+- **Zip bundles for documents with media.** Save produces a `.zip` as soon as the
+  document has images — `main.typ` (clean source, no base64 trailer), the media as
+  real files under `assets/`, and the editor state in a `.typwys/state.json` sidecar
+  other Typst tooling ignores. Unzip it and `typst compile main.typ` just works.
+  Open accepts a zip either way: with the sidecar it round-trips exactly, and **any**
+  zipped Typst project imports too — a wrapper folder from zipping a directory is
+  stripped, relative and absolute image paths both resolve, `#include`d `.typ` files
+  come along, and images render for real instead of as the importer's placeholder.
+  Assets no longer referenced are dropped on save, so a bundle doesn't grow forever.
 - Structured **`#show` rule editor** (restyle headings, emphasis, links, … by set-style
   or a full `it => …` function, with custom selectors) and a **`#let` definitions** editor
   that lists every definition — the built-in `callout`, your own bindings, and the
@@ -164,6 +175,7 @@ relative (`./`) for the Tauri bundle (`--mode tauri`), and `/` for `npm run dev`
 | `src/{math,mathinline,footnote,image}view.ts` | NodeViews (live math, footnote, figure) |
 | `src/desktop.ts` | Native file dialogs (Tauri) |
 | `src/typst.ts` / `src/assets.ts` | WASM compiler wrapper + image asset store |
+| `src/bundle.ts` | Zip bundles: read/write `main.typ` + media + state sidecar |
 | `src/templates.ts` | Templates (logic layer + ProseMirror content), picker icons |
 | `src/main.ts` | Ribbon, modals, preview, export — the UI shell |
 
@@ -182,7 +194,8 @@ preserves imports and any unmodeled preamble verbatim, so loading and re-saving
 doesn't lose them. Labels and cross-references use the full Typst `prefix:name`
 convention (`<fig:sun>`, `@fig:sun`). It imports `#image`/`#figure` (single- or
 multi-line) as real image nodes — keeping width, caption and figure `<label>` —
-with a placeholder preview (a plain `.typ` carries no image bytes), and
+with a placeholder preview when a bare `.typ` carries no image bytes (open the project
+as a **zip** instead and the real images load), and
 `#figure(table(…))` as an editable, captioned, labelled table; anything it can't
 model faithfully (e.g. a table with bare `$math$` cells) is kept as a lossless raw
 block rather than corrupted. There are **golden round-trip serializer tests** and
