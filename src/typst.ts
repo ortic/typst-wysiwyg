@@ -24,6 +24,9 @@ function getWorker(): Worker {
     // A worker-level failure rejects everything in flight.
     for (const [, slot] of pending) slot.reject(e.message || 'Typst worker error');
     pending.clear();
+    // Start over with a fresh worker on the next request; this one is gone.
+    worker?.terminate();
+    worker = undefined;
   };
   return worker;
 }
