@@ -290,6 +290,38 @@ function parseCaption(text: string): string {
   return str ? unescapeTypstString(str[1]) : '';
 }
 
+/** Index of the `$` closing the math that opens at `open`, or -1. */
+function closingDollar(s: string, open: number): number {
+  for (let k = open + 1; k < s.length; k++) {
+    if (s[k] === '\\') k++;
+    else if (s[k] === '$') return k;
+  }
+  return -1;
+}
+
+/**
+ * Read a block equation starting on line `from`. Typst tells display math from
+ * inline math by the whitespace inside the dollars (`$ x $` vs `$x$`), and an
+ * equation followed by more text on its line is just the start of a paragraph
+ * — so both of those are left for the inline parser.
+ */
+function readMathBlock(lines: string[], from: number): { src: string; next: number } | null {
+  const text = lines.slice(from).join('\n');
+  const open = text.indexOf('$');
+  const close = closingDollar(text, open);
+  if (close < 0) return null;
+  const inner = text.slice(open + 1, close);
+  if (!/^\s/.test(inner) || !/\s$/.test(inner)) return null;
+  const lineEnd = text.indexOf('\n', close);
+  if (text.slice(close + 1, lineEnd < 0 ? text.length : lineEnd).trim() !== '') return null;
+  return { src: inner.trim(), next: from + text.slice(0, close).split('\n').length };
+}
+
+/** True when a line opens with `$…$` inline math (closed on that same line). */
+function startsWithInlineMath(line: string): boolean {
+  return line.startsWith('$') && closingDollar(line, 0) > 0;
+}
+
 interface ListEntry { indent: number; ordered: boolean; text: string }
 
 /** Build nested bullet/ordered lists from indented `- `/`+ ` lines. */
@@ -446,18 +478,10 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     }
 
     if (t.startsWith('$')) {
-      const collected: string[] = [];
-      let j = i;
-      let closed = false;
-      while (j < lines.length) {
-        collected.push(lines[j]);
-        if ((collected.join('\n').match(/\$/g) || []).length >= 2) { closed = true; break; }
-        j++;
-      }
-      if (closed) {
-        const inner = collected.join('\n').replace(/^\s*\$/, '').replace(/\$\s*$/, '').trim();
-        blocks.push({ type: 'mathBlock', attrs: { src: inner } });
-        i = j + 1;
+      const math = readMathBlock(lines, i);
+      if (math) {
+        blocks.push({ type: 'mathBlock', attrs: { src: math.src } });
+        i = math.next;
         continue;
       }
     }
@@ -465,8 +489,9 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     // A paragraph that opens with an inline formatting function — the serializer
     // emits #strong[…]/#emph[…]/#strike[…]/… (not *…*/_…_) so marks on part of a
     // word still compile. Parse it as a paragraph rather than freezing the whole
-    // line as a raw block below.
-    if (/^#(?:strong|emph|strike|highlight|underline|link|text|footnote|ref|cite|raw)[([]/.test(t)) {
+    // line as a raw block below. The same goes for one that opens with inline
+    // math (`$x$ is …`).
+    if (/^#(?:strong|emph|strike|highlight|underline|link|text|footnote|ref|cite|raw)[([]/.test(t) || startsWithInlineMath(t)) {
       const buf: string[] = [lines[i]]; i++;
       while (i < lines.length && lines[i].trim() !== '' && !BLOCK_START.test(lines[i].trim())) { buf.push(lines[i]); i++; }
       blocks.push({ type: 'paragraph', content: parseInline(buf.join(' ')) });

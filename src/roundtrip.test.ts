@@ -530,6 +530,24 @@ describe('import keeps what it cannot model', () => {
   });
 });
 
+describe('math at the start of a line', () => {
+  const blocks = (src: string) => (importTypst(src).content as { content: { type: string; attrs?: Record<string, unknown>; content?: { type: string }[] }[] }).content;
+
+  it('a paragraph opening with inline math stays a paragraph', () => {
+    const [para, ...rest] = blocks('$x^2$ is a variable and $y$ too.');
+    expect(rest).toHaveLength(0);
+    expect(para.type).toBe('paragraph');
+    expect(para.content!.map((n) => n.type)).toEqual(['mathInline', 'text', 'mathInline', 'text']);
+    expect(cycle('$x^2$ is a variable and $y$ too.').typ).toContain('$x^2$ is a variable and $y$ too.');
+  });
+
+  it('display math is still a block, on one line or several', () => {
+    expect(blocks('$ a + b $')).toEqual([{ type: 'mathBlock', attrs: { src: 'a + b' } }]);
+    expect(blocks('$\n  a + b\n$\n\nafter')[0]).toEqual({ type: 'mathBlock', attrs: { src: 'a + b' } });
+    expect(blocks('$\n  a + b\n$\n\nafter')[1].type).toBe('paragraph');
+  });
+});
+
 describe('re-importing edited source', () => {
   it('carries image previews and the bibliography over', () => {
     const prevLogic = importTypst('= Hi').logic;
