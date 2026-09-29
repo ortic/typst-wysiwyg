@@ -493,6 +493,14 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
       continue;
     }
 
+    if (/^#quote\(\s*block:\s*true\s*\)\[/.test(t)) {
+      const { inner, next } = readBalancedLines(lines, i, '[', ']');
+      const dedented = inner.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n');
+      blocks.push({ type: 'blockquote', content: parseContent(dedented).content });
+      i = next;
+      continue;
+    }
+
     const colsM = t.match(/^#columns\((\d+)\)\[/);
     if (colsM) {
       const { inner, next } = readBalancedLines(lines, i, '[', ']');

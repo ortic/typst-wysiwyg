@@ -596,6 +596,13 @@ describe('serializer output means what the editor shows', () => {
   it('keeps inline math inline when its source is padded', () => {
     expect(ser(p(t('x '), { type: 'mathInline', attrs: { src: ' a + b ' } }))).toBe('x $a + b$');
   });
+
+  it('keeps blockquote paragraphs apart and re-imports the quote', () => {
+    const quote = { type: 'blockquote', content: [p(t('one')), p(t('two'))] };
+    const typ = ser(quote);
+    expect(typ).toBe('#quote(block: true)[\n  one\n\n  two\n]');
+    expect(reimport(typ)).toEqual([quote]);
+  });
 });
 
 describe('table spans', () => {

@@ -140,8 +140,10 @@ function serializeBlock(node: PMNode): string {
       return serializeList(node, '-', 0);
     case 'orderedList':
       return serializeList(node, '+', 0);
-    case 'blockquote':
-      return `#quote(block: true)[${childrenJoined(node, ' ')}]`;
+    case 'blockquote': {
+      const inner = childrenBlocks(node).join('\n\n');
+      return `#quote(block: true)[\n${indentLines(inner, '  ')}\n]`;
+    }
     case 'codeBlock':
       return node.textContent; // raw Typst escape hatch — verbatim
     case 'codeListing': {
@@ -296,9 +298,6 @@ function childrenBlocks(node: PMNode): string[] {
   const out: string[] = [];
   node.forEach((child) => out.push(serializeBlock(child)));
   return out;
-}
-function childrenJoined(node: PMNode, sep: string): string {
-  return childrenBlocks(node).join(sep);
 }
 
 /** Serialize the whole document: top-level blocks separated by blank lines. */
