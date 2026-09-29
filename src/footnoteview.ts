@@ -1,5 +1,9 @@
 // NodeView for an inline footnote: a superscript number that opens a small
 // popover to edit the footnote text. Serializes to `#footnote[...]`.
+//
+// The number itself is drawn by a CSS counter (see styles.css): ProseMirror
+// only updates the node views a change touches, so a number written here would
+// go stale whenever a footnote is added or removed earlier in the document.
 
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -26,9 +30,6 @@ export function createFootnoteView({ node, editor, getPos }: NodeViewProps) {
     });
     return n + 1;
   };
-  const refresh = () => { dom.textContent = String(number()); };
-  refresh();
-
   let pop: HTMLDivElement | null = null;
   const commit = () => {
     const pos = getPos();
@@ -74,7 +75,6 @@ export function createFootnoteView({ node, editor, getPos }: NodeViewProps) {
     update(updated: PMNode) {
       if (updated.type.name !== 'footnote') return false;
       if (!pop) content = updated.attrs.content;
-      refresh();
       return true;
     },
     selectNode() { dom.classList.add('sel'); },
