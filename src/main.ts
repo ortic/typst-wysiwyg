@@ -462,8 +462,18 @@ function setHeadingLabel(): void {
   const input = window.prompt('Label for this heading (letters, digits, - and _):', current);
   if (input === null) return;
   const label = input.trim().replace(/[^\w-]/g, '-').replace(/^-+|-+$/g, '');
+  if (labelTaken(label, current)) return;
   editor.chain().focus().updateAttributes('heading', { label: label || null }).run();
   schedulePreview();
+}
+
+/** Typst refuses to compile a label that occurs twice, so turn a duplicate
+ *  down (with a message) before it reaches the document. */
+function labelTaken(label: string, current: string): boolean {
+  if (!label || label === current || !documentLabels().includes(label)) return false;
+  alert(`The label “${label}” is already in use. Labels must be unique.`);
+  renderRibbon(); // put the field back to the stored value
+  return true;
 }
 
 interface LabelInfo { label: string; text: string }
@@ -687,7 +697,7 @@ function ribbonGroups(): Node[] {
           rbtn('▢', 'Border', () => updateImage({ border: !at.border }), !!at.border),
         ),
         group('Label',
-          rfield('Figure label', attrInput((at.label as string) || '', (v) => updateImage({ label: v || null }), 'fig:name')),
+          rfield('Figure label', attrInput((at.label as string) || '', (v) => { if (!labelTaken(v, (at.label as string) || '')) updateImage({ label: v || null }); }, 'fig:name')),
         ),
         group('Arrange',
           rbtn('✕', 'Delete', () => cmd((c) => c.deleteSelection())),
@@ -717,7 +727,7 @@ function ribbonGroups(): Node[] {
         ),
         group('Figure',
           rfield('Caption', attrInput((at.caption as string) || '', (v) => updateTable({ caption: v || null }), 'caption')),
-          rfield('Label', attrInput((at.label as string) || '', (v) => updateTable({ label: v || null }), 'tab:name')),
+          rfield('Label', attrInput((at.label as string) || '', (v) => { if (!labelTaken(v, (at.label as string) || '')) updateTable({ label: v || null }); }, 'tab:name')),
         ),
         group('Table',
           rbtn('✕', 'Delete', () => cmd((c) => c.deleteTable())),
