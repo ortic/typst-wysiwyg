@@ -12,7 +12,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { generate } from './generate';
 import { calloutWrapping } from './editor';
 import { serializeContent } from './serialize';
-import { importTypst } from './typimport';
+import { importTypst, reimportTypst } from './typimport';
 import { TEMPLATES } from './templates';
 import type { DocLogic } from './model';
 
@@ -482,5 +482,24 @@ See @tab:d.`;
     // And it re-imports to exactly the original text (round-trip safe).
     const back = importTypst(typ) as { content: { content: { content: { text: string }[] }[] } };
     expect(back.content.content[0].content[0].text).toBe(text);
+  });
+});
+
+describe('re-importing edited source', () => {
+  it('carries image previews and the bibliography over', () => {
+    const prevLogic = importTypst('= Hi').logic;
+    prevLogic.bibliography = { format: 'bibtex', content: '@article{smith, title={A}}' };
+    const prevContent = { type: 'doc', content: [{ type: 'image', attrs: { src: 'data:image/png;base64,AAAA', path: '/assets/img1.png' } }] };
+    const src = '#image("/assets/img1.png", width: 50%)\n\nSee #ref(<smith>)\n\n#bibliography("/refs.bib")';
+    const out = reimportTypst(src, { logic: prevLogic, content: prevContent });
+    const img = (out.content as { content: { attrs: Record<string, unknown> }[] }).content[0];
+    expect(img.attrs).toMatchObject({ src: 'data:image/png;base64,AAAA', path: '/assets/img1.png', width: 50 });
+    expect(out.logic.bibliography).toEqual(prevLogic.bibliography);
+  });
+
+  it('drops the bibliography when the source no longer uses it', () => {
+    const prevLogic = importTypst('= Hi').logic;
+    prevLogic.bibliography = { format: 'bibtex', content: '@article{smith, title={A}}' };
+    expect(reimportTypst('= Hi', { logic: prevLogic, content: { type: 'doc', content: [] } }).logic.bibliography).toBeUndefined();
   });
 });

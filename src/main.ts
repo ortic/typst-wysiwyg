@@ -13,7 +13,7 @@ import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
 import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
 import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
-import { STATE_MARKER, extractEmbeddedState, importTypst } from './typimport';
+import { STATE_MARKER, extractEmbeddedState, importTypst, reimportTypst } from './typimport';
 import { pageConfig, relayoutPages } from './pagination';
 import { showRulesToCss } from './showcss';
 
@@ -1037,6 +1037,16 @@ function openDocText(text: string): void {
   applyDoc({ version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: {} });
 }
 
+/** Apply source edited in the Typst source modal. Unlike opening a file, this
+ *  replaces the markup of the document that is already open, so its media and
+ *  bibliography stay — the source only ever refers to them by path. */
+function applySourceEdit(text: string): void {
+  if (text.trimStart().startsWith('{') || extractEmbeddedState(text)) { openDocText(text); return; }
+  const { assets: keptAssets } = currentDoc();
+  const imported = reimportTypst(text, { logic, content: editor.getJSON() });
+  applyDoc({ version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: keptAssets });
+}
+
 async function saveToFile(): Promise<void> {
   const content = currentTypFile();
   if (isDesktop()) {
@@ -1461,7 +1471,7 @@ function openSourceModal(opts?: { focus?: string }): void {
   const apply = el('button', { class: 'primary' }, 'Apply changes');
   apply.onclick = () => {
     try {
-      openDocText(ta.value); // re-parse the edited markup into the document
+      applySourceEdit(ta.value); // re-parse the edited markup into the document
       closeModal();
     } catch (e) {
       err.textContent = 'Could not parse source: ' + String(e);

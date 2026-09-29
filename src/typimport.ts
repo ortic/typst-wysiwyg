@@ -773,3 +773,31 @@ function usesCallout(node: { type?: string; content?: unknown[] }): boolean {
   if (node.type === 'callout') return true;
   return Array.isArray(node.content) && node.content.some((c) => usesCallout(c as typeof node));
 }
+
+/**
+ * Re-import source that was generated from the open document (the Typst source
+ * modal). Plain Typst can't carry what lives outside the markup, so the image
+ * previews and the bibliography are carried over from the document being
+ * replaced — as long as the edited source still refers to them.
+ */
+export function reimportTypst(text: string, prev: { logic: DocLogic; content: unknown }): { logic: DocLogic; content: object } {
+  const imported = importTypst(text);
+  if (prev.logic.bibliography && /^\s*#bibliography\(/m.test(text)) imported.logic.bibliography = prev.logic.bibliography;
+
+  const srcByPath = new Map<string, string>();
+  const walk = (n: unknown, visit: (node: { type?: string; attrs?: Record<string, unknown> }) => void): void => {
+    if (Array.isArray(n)) { n.forEach((c) => walk(c, visit)); return; }
+    if (!n || typeof n !== 'object') return;
+    const node = n as { type?: string; attrs?: Record<string, unknown>; content?: unknown };
+    visit(node);
+    if (node.content) walk(node.content, visit);
+  };
+  walk(prev.content, (n) => {
+    if (n.type === 'image' && typeof n.attrs?.path === 'string' && typeof n.attrs.src === 'string') srcByPath.set(n.attrs.path, n.attrs.src);
+  });
+  walk(imported.content, (n) => {
+    const src = n.type === 'image' && typeof n.attrs?.path === 'string' ? srcByPath.get(n.attrs.path) : undefined;
+    if (src) n.attrs!.src = src;
+  });
+  return imported;
+}
