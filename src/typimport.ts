@@ -171,12 +171,57 @@ function parseInline(s: string): PMInline[] {
 }
 
 // --- table parsing ----------------------------------------------------------
+interface ParsedCell { content: string; header: boolean; colspan: number; rowspan: number }
+
+/** Parse a `[…]` or `table.cell(colspan: …, rowspan: …)[…]` argument. Null when
+ *  it isn't one, or carries cell args we don't model (fill, align, x/y, …) —
+ *  the caller then keeps the whole table as a raw block. */
+function parseCell(arg: string, header: boolean): ParsedCell | null {
+  let colspan = 1, rowspan = 1;
+  let rest = arg;
+  if (arg.startsWith('table.cell(')) {
+    const r = readBalancedFrom(arg, arg.indexOf('('), '(', ')');
+    for (const f of splitTopLevel(r.content, ',').map((a) => a.trim()).filter(Boolean)) {
+      const k = argKey(f), v = argVal(f);
+      if (!/^\d+$/.test(v)) return null;
+      if (k === 'colspan') colspan = parseInt(v, 10);
+      else if (k === 'rowspan') rowspan = parseInt(v, 10);
+      else return null;
+    }
+    rest = arg.slice(r.end).trim();
+  }
+  if (!rest.startsWith('[')) return null;
+  const body = readBalancedFrom(rest, 0, '[', ']');
+  if (rest.slice(body.end).trim() !== '') return null;
+  return { content: body.content, header, colspan, rowspan };
+}
+
+/** Flow cells into rows the way Typst does: left to right, skipping the grid
+ *  slots that a spanning cell from an earlier row already covers. */
+function layoutRows(cells: ParsedCell[], columns: number): ParsedCell[][] {
+  const rows: ParsedCell[][] = [];
+  const taken = new Set<string>();
+  let r = 0, c = 0;
+  for (const cell of cells) {
+    while (taken.has(`${r},${c}`) || c >= columns) {
+      if (c >= columns) { r++; c = 0; } else c++;
+    }
+    for (let dr = 0; dr < cell.rowspan; dr++) {
+      for (let dc = 0; dc < cell.colspan; dc++) taken.add(`${r + dr},${c + dc}`);
+    }
+    (rows[r] ??= []).push(cell);
+    c += cell.colspan;
+  }
+  // A row fully covered by spans from above holds no cell of its own.
+  return rows.filter((row) => row?.length);
+}
+
 function parseTableInner(inner: string): object | null {
   const args = splitTopLevel(inner, ',').map((a) => a.trim()).filter(Boolean);
   let columns = 0;
   let ok = true; // false when we hit a positional arg we can't model as a cell
   const styleArgs: string[] = []; // columns/align/stroke/… kept verbatim
-  const cells: { content: string; header: boolean }[] = [];
+  const cells: ParsedCell[] = [];
   for (const arg of args) {
     if (arg.startsWith('columns:')) {
       const spec = arg.slice(8).trim();
@@ -188,16 +233,13 @@ function parseTableInner(inner: string): object | null {
     } else if (arg.startsWith('table.header(')) {
       const inner2 = readBalancedFrom(arg, arg.indexOf('('), '(', ')').content;
       for (const cell of splitTopLevel(inner2, ',')) {
-        const c = cell.trim();
-        if (c.startsWith('[')) cells.push({ content: readBalancedFrom(c, 0, '[', ']').content, header: true });
-        else if (c) ok = false;
+        if (!cell.trim()) continue;
+        const parsed = parseCell(cell.trim(), true);
+        if (parsed) cells.push(parsed); else ok = false;
       }
-    } else if (arg.startsWith('[')) {
-      cells.push({ content: readBalancedFrom(arg, 0, '[', ']').content, header: false });
-    } else if (arg.startsWith('table.cell')) {
-      const br = arg.indexOf('[');
-      if (br >= 0) cells.push({ content: readBalancedFrom(arg, br, '[', ']').content, header: false });
-      else ok = false;
+    } else if (arg.startsWith('[') || arg.startsWith('table.cell(')) {
+      const parsed = parseCell(arg, false);
+      if (parsed) cells.push(parsed); else ok = false;
     } else {
       // A positional arg we don't understand (bare $math$, table.header[…],
       // table.hline()…). Bail so the caller keeps the table as a raw block
@@ -207,8 +249,8 @@ function parseTableInner(inner: string): object | null {
   }
   if (!columns || !cells.length || !ok) return null;
   const rows: object[] = [];
-  for (let r = 0; r < cells.length; r += columns) {
-    const rowCells = cells.slice(r, r + columns).map((c) => {
+  for (const row of layoutRows(cells, columns)) {
+    const rowCells = row.map((c) => {
       let txt = c.content.trim();
       // A header cell's bold is implied by the header row; unwrap #strong[…]
       // (our own output) so it doesn't accumulate a redundant bold mark.
@@ -218,6 +260,7 @@ function parseTableInner(inner: string): object | null {
       }
       return {
         type: c.header ? 'tableHeader' : 'tableCell',
+        ...(c.colspan > 1 || c.rowspan > 1 ? { attrs: { colspan: c.colspan, rowspan: c.rowspan } } : {}),
         content: [{ type: 'paragraph', content: parseInline(txt) }],
       };
     });

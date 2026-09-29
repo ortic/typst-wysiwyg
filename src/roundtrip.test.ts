@@ -566,3 +566,27 @@ describe('re-importing edited source', () => {
     expect(reimportTypst('= Hi', { logic: prevLogic, content: { type: 'doc', content: [] } }).logic.bibliography).toBeUndefined();
   });
 });
+
+describe('table spans', () => {
+  it('imports colspan/rowspan and keeps later cells in their rows', () => {
+    const src = `#table(
+  columns: 3,
+  table.cell(colspan: 2)[wide], table.cell(rowspan: 2)[tall],
+  [a], [b],
+  [c], [d], [e],
+)`;
+    const table = (importTypst(src).content as { content: { content: { content: { attrs?: object; content: { content: { text: string }[] }[] }[] }[] }[] }).content[0];
+    const rows = table.content.map((r) => r.content.map((c) => c.content[0].content[0].text));
+    expect(rows).toEqual([['wide', 'tall'], ['a', 'b'], ['c', 'd', 'e']]);
+    expect(table.content[0].content[0].attrs).toEqual({ colspan: 2, rowspan: 1 });
+    expect(table.content[0].content[1].attrs).toEqual({ colspan: 1, rowspan: 2 });
+    const { typ } = cycle(src);
+    expect(typ).toContain('table.cell(colspan: 2)[wide], table.cell(rowspan: 2)[tall]');
+  });
+
+  it('keeps a table raw when a cell carries args we do not model', () => {
+    const src = '#table(\n  columns: 2,\n  table.cell(fill: red)[a], [b],\n)';
+    const [block] = (importTypst(src).content as { content: { type: string }[] }).content;
+    expect(block.type).toBe('codeBlock');
+  });
+});
