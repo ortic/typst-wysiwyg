@@ -987,8 +987,16 @@ function currentDoc(): SavedDoc {
   return { version: DOC_VERSION, logic, content: editor.getJSON(), assets: assetObj };
 }
 
+/** Whether a loaded value has the shape the rest of the app relies on. */
+function isDocLogic(v: unknown): v is DocLogic {
+  const l = v as DocLogic | null;
+  return !!l && typeof l === 'object'
+    && !!l.style?.page && !!l.style.text && !!l.style.par
+    && Array.isArray(l.lets) && Array.isArray(l.shows);
+}
+
 function applyDoc(data: SavedDoc): void {
-  if (!data || typeof data !== 'object' || !data.content) throw new Error('Not a typst-wysiwyg document');
+  if (!data || typeof data !== 'object' || !data.content || !isDocLogic(data.logic)) throw new Error('Not a typst-wysiwyg document');
   logic = data.logic;
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
@@ -1095,7 +1103,9 @@ function scheduleAutosave(): void {
 function loadSaved(): SavedDoc | null {
   try {
     const s = localStorage.getItem(LS_KEY);
-    return s ? (JSON.parse(s) as SavedDoc) : null;
+    const doc = s ? (JSON.parse(s) as SavedDoc) : null;
+    // A damaged autosave must not keep the app from starting.
+    return doc && typeof doc === 'object' && doc.content && isDocLogic(doc.logic) ? doc : null;
   } catch { return null; }
 }
 
@@ -1584,9 +1594,11 @@ app.replaceChildren(ribbon(), main);
 
 const restored = loadSaved();
 if (restored) {
-  logic = restored.logic ?? initial.logic;
+  logic = restored.logic;
   clearAssets();
-  if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
+  try {
+    if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
+  } catch { /* undecodable asset: the document still opens, minus that file */ }
 }
 mountEditor((restored?.content ?? initial.content) as object);
 normalizeLogic();
