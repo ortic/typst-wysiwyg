@@ -567,6 +567,27 @@ describe('re-importing edited source', () => {
   });
 });
 
+describe('serializer output means what the editor shows', () => {
+  const p = (...content: object[]) => ({ type: 'paragraph', content });
+  const t = (text: string) => ({ type: 'text', text });
+  const br = { type: 'hardBreak' };
+  const ser = (...blocks: object[]) => serializeContent(PMNode.fromJSON(schema, { type: 'doc', content: blocks }));
+  const reimport = (typ: string) => (importTypst(typ).content as { content: object[] }).content;
+
+  it('keeps a hard break inside its list item and heading', () => {
+    const list = { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('a'), br, t('b'))] }] };
+    expect(ser(list)).toBe('- a \\ b');
+    expect(reimport('- a \\ b')).toEqual([list]);
+    expect(ser({ type: 'heading', attrs: { level: 1 }, content: [t('a'), br, t('b')] })).toBe('= a \\ b');
+  });
+
+  it('round-trips a hard break in a paragraph', () => {
+    const typ = ser(p(t('a'), br, t('b')));
+    expect(typ).toBe('a \\\nb');
+    expect(reimport(typ)).toEqual([p(t('a'), br, t('b'))]);
+  });
+});
+
 describe('table spans', () => {
   it('imports colspan/rowspan and keeps later cells in their rows', () => {
     const src = `#table(

@@ -138,7 +138,16 @@ function parseInline(s: string): PMInline[] {
   let i = 0;
   while (i < s.length) {
     const c = s[i];
-    if (c === '\\' && i + 1 < s.length) { buf += s[i + 1]; i += 2; continue; }
+    // A backslash before whitespace (or ending the text) is a forced line break.
+    if (c === '\\' && (i + 1 >= s.length || /\s/.test(s[i + 1]))) {
+      buf = buf.replace(/ +$/, '');
+      flush();
+      out.push({ type: 'hardBreak' });
+      i++;
+      while (i < s.length && /\s/.test(s[i])) i++;
+      continue;
+    }
+    if (c === '\\') { buf += s[i + 1]; i += 2; continue; }
     if (c === '*') { flush(); active.has('bold') ? active.delete('bold') : active.add('bold'); i++; continue; }
     if (c === '_') { flush(); active.has('italic') ? active.delete('italic') : active.add('italic'); i++; continue; }
     if (c === '`') { const j = s.indexOf('`', i + 1); if (j > i) { flush(); out.push({ type: 'text', text: s.slice(i + 1, j), marks: [{ type: 'code' }] } as PMText); i = j + 1; continue; } }

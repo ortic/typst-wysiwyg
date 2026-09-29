@@ -77,18 +77,22 @@ function applyMarks(text: string, marks: readonly Mark[]): string {
   return t;
 }
 
+/** A hard break that stays on its line (`\` followed by a space breaks too).
+ *  For headings and list items, which a newline would end. */
+const BREAK_SAME_LINE = ' \\ ';
+
 /** Serialize inline content (text + hardBreaks) of a block node. */
-function inline(node: PMNode): string {
+function inline(node: PMNode, lineBreak = ' \\\n'): string {
   let out = '';
   node.forEach((child) => {
     if (child.isText) out += applyMarks(child.text ?? '', child.marks);
-    else if (child.type.name === 'hardBreak') out += ' \\\n';
+    else if (child.type.name === 'hardBreak') out += lineBreak;
     else if (child.type.name === 'footnote') out += `#footnote[${escapeMarkup((child.attrs.content as string) || '')}]`;
     else if (child.type.name === 'mathInline') out += `$${(child.attrs.src as string) || ''}$`;
     // #ref(<key>) rather than @key: the @ form greedily eats trailing word
     // characters ("@smith2020Quarterly"), so use the explicit, terminated form.
     else if (child.type.name === 'reference') out += `#ref(<${(child.attrs.target as string) || ''}>)`;
-    else out += inline(child); // defensive
+    else out += inline(child, lineBreak); // defensive
   });
   return out;
 }
@@ -111,7 +115,7 @@ function serializeList(node: PMNode, marker: string, depth: number): string {
       if (name === 'bulletList' || name === 'orderedList') {
         lines.push(serializeList(child, name === 'orderedList' ? '+' : '-', depth + 1));
       } else if (!leadDone) {
-        lines.push(`${pad}${marker} ${inline(child)}`);
+        lines.push(`${pad}${marker} ${inline(child, BREAK_SAME_LINE)}`);
         leadDone = true;
       } else {
         lines.push(`${pad}  ${inline(child)}`);
@@ -125,7 +129,7 @@ function serializeBlock(node: PMNode): string {
   switch (node.type.name) {
     case 'heading': {
       const label = (node.attrs.label as string) || '';
-      return `${'='.repeat(node.attrs.level as number)} ${inline(node)}${label ? ` <${label}>` : ''}`;
+      return `${'='.repeat(node.attrs.level as number)} ${inline(node, BREAK_SAME_LINE)}${label ? ` <${label}>` : ''}`;
     }
     case 'paragraph':
       return inline(node);
