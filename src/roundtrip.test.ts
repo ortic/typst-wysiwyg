@@ -592,6 +592,10 @@ describe('serializer output means what the editor shows', () => {
     expect(typ).toBe('a \\\nb');
     expect(reimport(typ)).toEqual([p(t('a'), br, t('b'))]);
   });
+
+  it('keeps inline math inline when its source is padded', () => {
+    expect(ser(p(t('x '), { type: 'mathInline', attrs: { src: ' a + b ' } }))).toBe('x $a + b$');
+  });
 });
 
 describe('table spans', () => {

@@ -91,7 +91,7 @@ function inline(node: PMNode, lineBreak = ' \\\n'): string {
     if (child.isText) out += applyMarks(child.text ?? '', child.marks);
     else if (child.type.name === 'hardBreak') out += lineBreak;
     else if (child.type.name === 'footnote') out += `#footnote[${escapeMarkup((child.attrs.content as string) || '')}]`;
-    else if (child.type.name === 'mathInline') out += `$${(child.attrs.src as string) || ''}$`;
+    else if (child.type.name === 'mathInline') out += `$${((child.attrs.src as string) || '').trim()}$`; // padded, it would be display math
     // #ref(<key>) rather than @key: the @ form greedily eats trailing word
     // characters ("@smith2020Quarterly"), so use the explicit, terminated form.
     else if (child.type.name === 'reference') out += `#ref(<${(child.attrs.target as string) || ''}>)`;
