@@ -346,7 +346,9 @@ function installImageDropPaste(page: HTMLElement): void {
     if (!files.length) return;
     e.preventDefault();
     const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos;
-    for (const file of files) await insertImageFile(file, pos);
+    // Each one lands at the same position, ahead of the previous — so insert
+    // back to front to end up in the order they were dropped.
+    for (const file of pos != null ? files.reverse() : files) await insertImageFile(file, pos);
   });
   page.addEventListener('paste', async (e) => {
     const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'));
