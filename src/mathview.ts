@@ -4,6 +4,7 @@
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { renderFragmentSvg } from './typst';
+import { isSaveShortcut } from './footnoteview';
 
 interface NodeViewProps {
   node: PMNode;
@@ -43,19 +44,25 @@ export function createMathNodeView({ node, editor, getPos }: NodeViewProps) {
   };
   void draw(current);
 
-  ta.addEventListener('input', () => {
-    current = ta.value;
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => draw(current), 200);
-  });
   const commit = () => {
     const pos = getPos();
     if (typeof pos !== 'number') return;
+    if (current === editor.state.doc.nodeAt(pos)?.attrs.src) return; // nothing to record
     editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, { src: current }));
   };
+  // Commit while typing (debounced), not only on blur, so the preview and the
+  // autosave follow along.
+  ta.addEventListener('input', () => {
+    current = ta.value;
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => { void draw(current); commit(); }, 200);
+  });
   ta.addEventListener('blur', commit);
   // Keep ProseMirror from hijacking editing inside the textarea.
-  ta.addEventListener('keydown', (e) => e.stopPropagation());
+  ta.addEventListener('keydown', (e) => {
+    if (isSaveShortcut(e)) { commit(); return; } // let the app's Ctrl/Cmd+S see the latest source
+    e.stopPropagation();
+  });
   ta.addEventListener('mousedown', (e) => e.stopPropagation());
 
   return {

@@ -67,8 +67,9 @@ export interface ShowRule {
   target: ShowTarget;
   customSelector?: string; // raw Typst selector when target === 'custom'
   level: number | null; // only meaningful for heading; null = all levels
-  kind?: 'style' | 'function'; // default 'style'
+  kind?: 'style' | 'function' | 'raw'; // default 'style'
   body?: string; // Typst function body (receives `it`) when kind === 'function'
+  code?: string; // the whole `#show …` statement, kept verbatim, when kind === 'raw'
   props: {
     fill: string;       // '' or hex like #1c7ed6
     sizePt: number | null;

@@ -70,6 +70,7 @@ function functionDecls(body: string): string[] {
 }
 
 function declsFor(r: ShowRule, pxPerPt: number): string[] {
+  if (r.kind === 'raw') return []; // verbatim Typst — nothing we can translate
   if (r.kind === 'function') return functionDecls((r.body ?? '').trim());
   return styleDecls(r.props, pxPerPt);
 }

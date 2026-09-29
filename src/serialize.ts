@@ -16,7 +16,10 @@ import type { Node as PMNode, Mark } from '@tiptap/pm/model';
  *  hyphen) and `//`/`/*` start comments. Escaping them keeps the output
  *  faithful to what the user typed (WYSIWYG). */
 export function escapeMarkup(s: string): string {
-  return s.replace(/([\\#$*_`<>@~[\]=+/-])/g, '\\$1');
+  return s
+    .replace(/([\\#$*_`<>@~[\]=+/-])/g, '\\$1')
+    // `1. text` opening a run would start a numbered list item.
+    .replace(/^(\s*\d+)\.(?=\s|$)/, '$1\\.');
 }
 
 function quote(s: string): string {
@@ -77,18 +80,22 @@ function applyMarks(text: string, marks: readonly Mark[]): string {
   return t;
 }
 
+/** A hard break that stays on its line (`\` followed by a space breaks too).
+ *  For headings and list items, which a newline would end. */
+const BREAK_SAME_LINE = ' \\ ';
+
 /** Serialize inline content (text + hardBreaks) of a block node. */
-function inline(node: PMNode): string {
+function inline(node: PMNode, lineBreak = ' \\\n'): string {
   let out = '';
   node.forEach((child) => {
     if (child.isText) out += applyMarks(child.text ?? '', child.marks);
-    else if (child.type.name === 'hardBreak') out += ' \\\n';
+    else if (child.type.name === 'hardBreak') out += lineBreak;
     else if (child.type.name === 'footnote') out += `#footnote[${escapeMarkup((child.attrs.content as string) || '')}]`;
-    else if (child.type.name === 'mathInline') out += `$${(child.attrs.src as string) || ''}$`;
+    else if (child.type.name === 'mathInline') out += `$${((child.attrs.src as string) || '').trim()}$`; // padded, it would be display math
     // #ref(<key>) rather than @key: the @ form greedily eats trailing word
     // characters ("@smith2020Quarterly"), so use the explicit, terminated form.
     else if (child.type.name === 'reference') out += `#ref(<${(child.attrs.target as string) || ''}>)`;
-    else out += inline(child); // defensive
+    else out += inline(child, lineBreak); // defensive
   });
   return out;
 }
@@ -104,17 +111,19 @@ function serializeList(node: PMNode, marker: string, depth: number): string {
   const pad = '  '.repeat(depth);
   const lines: string[] = [];
   node.forEach((item) => {
-    // A listItem holds a paragraph (its text) and optionally nested lists.
+    // A listItem holds a paragraph (its text), optionally followed by nested
+    // lists or further blocks. Those belong to the item as long as they are
+    // indented past its marker; a blank line keeps them separate blocks.
     let leadDone = false;
     item.forEach((child) => {
       const name = child.type.name;
       if (name === 'bulletList' || name === 'orderedList') {
         lines.push(serializeList(child, name === 'orderedList' ? '+' : '-', depth + 1));
       } else if (!leadDone) {
-        lines.push(`${pad}${marker} ${inline(child)}`);
+        lines.push(`${pad}${marker} ${inline(child, BREAK_SAME_LINE)}`);
         leadDone = true;
       } else {
-        lines.push(`${pad}  ${inline(child)}`);
+        lines.push('', indentLines(serializeBlock(child), `${pad}  `));
       }
     });
   });
@@ -125,7 +134,7 @@ function serializeBlock(node: PMNode): string {
   switch (node.type.name) {
     case 'heading': {
       const label = (node.attrs.label as string) || '';
-      return `${'='.repeat(node.attrs.level as number)} ${inline(node)}${label ? ` <${label}>` : ''}`;
+      return `${'='.repeat(node.attrs.level as number)} ${inline(node, BREAK_SAME_LINE)}${label ? ` <${label}>` : ''}`;
     }
     case 'paragraph':
       return inline(node);
@@ -133,8 +142,10 @@ function serializeBlock(node: PMNode): string {
       return serializeList(node, '-', 0);
     case 'orderedList':
       return serializeList(node, '+', 0);
-    case 'blockquote':
-      return `#quote(block: true)[${childrenJoined(node, ' ')}]`;
+    case 'blockquote': {
+      const inner = childrenBlocks(node).join('\n\n');
+      return `#quote(block: true)[\n${indentLines(inner, '  ')}\n]`;
+    }
     case 'codeBlock':
       return node.textContent; // raw Typst escape hatch — verbatim
     case 'codeListing': {
@@ -289,9 +300,6 @@ function childrenBlocks(node: PMNode): string[] {
   const out: string[] = [];
   node.forEach((child) => out.push(serializeBlock(child)));
   return out;
-}
-function childrenJoined(node: PMNode, sep: string): string {
-  return childrenBlocks(node).join(sep);
 }
 
 /** Serialize the whole document: top-level blocks separated by blank lines. */

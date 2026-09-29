@@ -33,11 +33,24 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+// Paths mapped into the compiler's VFS by earlier requests. Each request ships
+// the full asset set, so whatever it no longer lists is unmapped first —
+// otherwise a deleted image would keep resolving and hide the missing file.
+const mapped = new Set<string>();
+
+async function syncAssets(assets: [string, Uint8Array][]): Promise<void> {
+  const wanted = new Set(assets.map(([path]) => path));
+  for (const path of [...mapped]) {
+    if (!wanted.has(path)) { await $typst.unmapShadow(path); mapped.delete(path); }
+  }
+  for (const [path, bytes] of assets) { await $typst.mapShadow(path, bytes); mapped.add(path); }
+}
+
 async function handle(req: TypstRequest): Promise<TypstResponse> {
   return enqueue(async () => {
     try {
       init();
-      for (const [path, bytes] of req.assets) await $typst.mapShadow(path, bytes);
+      await syncAssets(req.assets);
       if (req.kind === 'pdf') {
         const pdf = await $typst.pdf({ mainContent: req.source });
         if (!pdf) throw new Error('PDF generation returned no data');

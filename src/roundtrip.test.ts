@@ -12,7 +12,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { generate } from './generate';
 import { calloutWrapping } from './editor';
 import { serializeContent } from './serialize';
-import { importTypst } from './typimport';
+import { importTypst, reimportTypst } from './typimport';
 import { TEMPLATES } from './templates';
 import type { DocLogic } from './model';
 
@@ -482,5 +482,158 @@ See @tab:d.`;
     // And it re-imports to exactly the original text (round-trip safe).
     const back = importTypst(typ) as { content: { content: { content: { text: string }[] }[] } };
     expect(back.content.content[0].content[0].text).toBe(text);
+  });
+});
+
+describe('import keeps what it cannot model', () => {
+  it('keeps unmodelled #show rules verbatim', () => {
+    const src = `#show heading: set block(above: 2em)
+#show link: underline
+#show raw: set text(font: "Fira Code", size: 9pt)
+= Hi`;
+    const { typ, logic } = cycle(src);
+    expect(logic.shows.map((s) => s.kind)).toEqual(['raw', 'raw', 'raw']);
+    expect(typ).toContain('#show heading: set block(above: 2em)');
+    expect(typ).toContain('#show link: underline');
+    expect(typ).toContain('#show raw: set text(font: "Fira Code", size: 9pt)');
+    expect(typ).not.toContain('set text()');
+  });
+
+  it('still models a plain set text(…) rule', () => {
+    const { logic } = cycle('#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"), size: 18pt, weight: "bold")\n= Hi');
+    expect(logic.shows[0]).toMatchObject({
+      kind: 'style', target: 'heading', level: 1,
+      props: { fill: '#1c7ed6', sizePt: 18, weight: 'bold', style: 'inherit' },
+    });
+  });
+
+  it('a brace-less `it =>` rule does not swallow a later block', () => {
+    const src = `#show heading: it => text(red, it)
+#let f(x) = {
+  x + 1
+}
+= Hi`;
+    const { typ, logic } = cycle(src);
+    expect(logic.shows).toHaveLength(1);
+    expect(logic.shows[0]).toMatchObject({ kind: 'function', body: 'text(red, it)' });
+    expect(logic.lets.map((l) => l.name)).toEqual(['f']);
+    expect(typ).toContain('#show heading: it => {\n  text(red, it)\n}');
+  });
+
+  it('reads a multi-line `it => { … }` rule', () => {
+    const src = `#show heading: it => {
+  set text(red)
+  it
+}
+= Hi`;
+    expect(cycle(src).logic.shows[0]).toMatchObject({ kind: 'function', body: 'set text(red)\nit' });
+  });
+});
+
+describe('math at the start of a line', () => {
+  const blocks = (src: string) => (importTypst(src).content as { content: { type: string; attrs?: Record<string, unknown>; content?: { type: string }[] }[] }).content;
+
+  it('a paragraph opening with inline math stays a paragraph', () => {
+    const [para, ...rest] = blocks('$x^2$ is a variable and $y$ too.');
+    expect(rest).toHaveLength(0);
+    expect(para.type).toBe('paragraph');
+    expect(para.content!.map((n) => n.type)).toEqual(['mathInline', 'text', 'mathInline', 'text']);
+    expect(cycle('$x^2$ is a variable and $y$ too.').typ).toContain('$x^2$ is a variable and $y$ too.');
+  });
+
+  it('display math is still a block, on one line or several', () => {
+    expect(blocks('$ a + b $')).toEqual([{ type: 'mathBlock', attrs: { src: 'a + b' } }]);
+    expect(blocks('$\n  a + b\n$\n\nafter')[0]).toEqual({ type: 'mathBlock', attrs: { src: 'a + b' } });
+    expect(blocks('$\n  a + b\n$\n\nafter')[1].type).toBe('paragraph');
+  });
+});
+
+describe('re-importing edited source', () => {
+  it('carries image previews and the bibliography over', () => {
+    const prevLogic = importTypst('= Hi').logic;
+    prevLogic.bibliography = { format: 'bibtex', content: '@article{smith, title={A}}' };
+    const prevContent = { type: 'doc', content: [{ type: 'image', attrs: { src: 'data:image/png;base64,AAAA', path: '/assets/img1.png' } }] };
+    const src = '#image("/assets/img1.png", width: 50%)\n\nSee #ref(<smith>)\n\n#bibliography("/refs.bib")';
+    const out = reimportTypst(src, { logic: prevLogic, content: prevContent });
+    const img = (out.content as { content: { attrs: Record<string, unknown> }[] }).content[0];
+    expect(img.attrs).toMatchObject({ src: 'data:image/png;base64,AAAA', path: '/assets/img1.png', width: 50 });
+    expect(out.logic.bibliography).toEqual(prevLogic.bibliography);
+  });
+
+  it('drops the bibliography when the source no longer uses it', () => {
+    const prevLogic = importTypst('= Hi').logic;
+    prevLogic.bibliography = { format: 'bibtex', content: '@article{smith, title={A}}' };
+    expect(reimportTypst('= Hi', { logic: prevLogic, content: { type: 'doc', content: [] } }).logic.bibliography).toBeUndefined();
+  });
+});
+
+describe('serializer output means what the editor shows', () => {
+  const p = (...content: object[]) => ({ type: 'paragraph', content });
+  const t = (text: string) => ({ type: 'text', text });
+  const br = { type: 'hardBreak' };
+  const ser = (...blocks: object[]) => serializeContent(PMNode.fromJSON(schema, { type: 'doc', content: blocks }));
+  const reimport = (typ: string) => (importTypst(typ).content as { content: object[] }).content;
+
+  it('escapes text that would start a numbered list', () => {
+    expect(ser(p(t('1. Introduction')))).toBe('1\\. Introduction');
+    expect(ser(p(t('Version 3.14 and 2. item')))).toBe('Version 3.14 and 2. item');
+    expect(reimport('1\\. Introduction')).toEqual([p(t('1. Introduction'))]);
+  });
+
+  it('keeps a hard break inside its list item and heading', () => {
+    const list = { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('a'), br, t('b'))] }] };
+    expect(ser(list)).toBe('- a \\ b');
+    expect(reimport('- a \\ b')).toEqual([list]);
+    expect(ser({ type: 'heading', attrs: { level: 1 }, content: [t('a'), br, t('b')] })).toBe('= a \\ b');
+  });
+
+  it('round-trips a hard break in a paragraph', () => {
+    const typ = ser(p(t('a'), br, t('b')));
+    expect(typ).toBe('a \\\nb');
+    expect(reimport(typ)).toEqual([p(t('a'), br, t('b'))]);
+  });
+
+  it('keeps inline math inline when its source is padded', () => {
+    expect(ser(p(t('x '), { type: 'mathInline', attrs: { src: ' a + b ' } }))).toBe('x $a + b$');
+  });
+
+  it('keeps blockquote paragraphs apart and re-imports the quote', () => {
+    const quote = { type: 'blockquote', content: [p(t('one')), p(t('two'))] };
+    const typ = ser(quote);
+    expect(typ).toBe('#quote(block: true)[\n  one\n\n  two\n]');
+    expect(reimport(typ)).toEqual([quote]);
+  });
+
+  it('keeps further blocks of a list item inside the item', () => {
+    const item = (...content: object[]) => ({ type: 'listItem', content });
+    const typ = ser({ type: 'bulletList', content: [
+      item(p(t('a')), p(t('b'))),
+      item(p(t('c')), { type: 'image', attrs: { src: 'data:,', path: '/assets/img1.png' } }),
+    ] });
+    expect(typ).toBe('- a\n\n  b\n- c\n\n  #image("/assets/img1.png", width: 80%)');
+  });
+});
+
+describe('table spans', () => {
+  it('imports colspan/rowspan and keeps later cells in their rows', () => {
+    const src = `#table(
+  columns: 3,
+  table.cell(colspan: 2)[wide], table.cell(rowspan: 2)[tall],
+  [a], [b],
+  [c], [d], [e],
+)`;
+    const table = (importTypst(src).content as { content: { content: { content: { attrs?: object; content: { content: { text: string }[] }[] }[] }[] }[] }).content[0];
+    const rows = table.content.map((r) => r.content.map((c) => c.content[0].content[0].text));
+    expect(rows).toEqual([['wide', 'tall'], ['a', 'b'], ['c', 'd', 'e']]);
+    expect(table.content[0].content[0].attrs).toEqual({ colspan: 2, rowspan: 1 });
+    expect(table.content[0].content[1].attrs).toEqual({ colspan: 1, rowspan: 2 });
+    const { typ } = cycle(src);
+    expect(typ).toContain('table.cell(colspan: 2)[wide], table.cell(rowspan: 2)[tall]');
+  });
+
+  it('keeps a table raw when a cell carries args we do not model', () => {
+    const src = '#table(\n  columns: 2,\n  table.cell(fill: red)[a], [b],\n)';
+    const [block] = (importTypst(src).content as { content: { type: string }[] }).content;
+    expect(block.type).toBe('codeBlock');
   });
 });

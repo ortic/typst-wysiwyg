@@ -4,6 +4,7 @@
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { renderFragmentSvg } from './typst';
+import { isSaveShortcut } from './footnoteview';
 
 interface NodeViewProps {
   node: PMNode;
@@ -29,6 +30,7 @@ export function createMathInlineView({ node, editor, getPos }: NodeViewProps) {
   const commit = () => {
     const pos = getPos();
     if (typeof pos === 'number') {
+      if (content === editor.state.doc.nodeAt(pos)?.attrs.src) return;
       editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, { src: content }));
     }
   };
@@ -59,7 +61,11 @@ export function createMathInlineView({ node, editor, getPos }: NodeViewProps) {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => draw(content), 200);
     });
-    ta.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') close(); });
+    ta.addEventListener('keydown', (e) => {
+      if (isSaveShortcut(e)) { commit(); return; } // let the app's Ctrl/Cmd+S see the latest source
+      e.stopPropagation();
+      if (e.key === 'Escape') close();
+    });
     pop.append(label, ta);
     document.body.appendChild(pop);
     const r = dom.getBoundingClientRect();

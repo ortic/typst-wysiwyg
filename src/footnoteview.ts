@@ -1,8 +1,17 @@
 // NodeView for an inline footnote: a superscript number that opens a small
 // popover to edit the footnote text. Serializes to `#footnote[...]`.
+//
+// The number itself is drawn by a CSS counter (see styles.css): ProseMirror
+// only updates the node views a change touches, so a number written here would
+// go stale whenever a footnote is added or removed earlier in the document.
 
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
+
+/** Ctrl/Cmd+S — handled by the app, so node-view fields must let it through. */
+export function isSaveShortcut(e: KeyboardEvent): boolean {
+  return (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
+}
 
 interface NodeViewProps {
   node: PMNode;
@@ -26,13 +35,11 @@ export function createFootnoteView({ node, editor, getPos }: NodeViewProps) {
     });
     return n + 1;
   };
-  const refresh = () => { dom.textContent = String(number()); };
-  refresh();
-
   let pop: HTMLDivElement | null = null;
   const commit = () => {
     const pos = getPos();
     if (typeof pos === 'number') {
+      if (content === editor.state.doc.nodeAt(pos)?.attrs.content) return;
       editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, { content }));
     }
   };
@@ -58,7 +65,11 @@ export function createFootnoteView({ node, editor, getPos }: NodeViewProps) {
     ta.rows = 3;
     ta.placeholder = 'Footnote text…';
     ta.addEventListener('input', () => { content = ta.value; });
-    ta.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') close(); });
+    ta.addEventListener('keydown', (e) => {
+      if (isSaveShortcut(e)) { commit(); return; } // let the app's Ctrl/Cmd+S see the latest text
+      e.stopPropagation();
+      if (e.key === 'Escape') close();
+    });
     pop.append(label, ta);
     document.body.appendChild(pop);
     const r = dom.getBoundingClientRect();
@@ -74,7 +85,6 @@ export function createFootnoteView({ node, editor, getPos }: NodeViewProps) {
     update(updated: PMNode) {
       if (updated.type.name !== 'footnote') return false;
       if (!pop) content = updated.attrs.content;
-      refresh();
       return true;
     },
     selectNode() { dom.classList.add('sel'); },

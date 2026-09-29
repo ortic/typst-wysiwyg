@@ -252,6 +252,9 @@ select, input[type=text], input[type=number], textarea {
   color: #4f46e5; cursor: pointer; font-weight: 700; font-size: .72em;
   vertical-align: super; line-height: 0; padding: 0 1px; user-select: none;
 }
+.page { counter-reset: footnote; }
+.footnote-marker { counter-increment: footnote; }
+.footnote-marker::before { content: counter(footnote); }
 .footnote-marker:hover { text-decoration: underline; }
 .footnote-marker.sel { background: #e6e8ff; border-radius: 2px; }
 .footnote-pop {

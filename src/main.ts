@@ -13,7 +13,7 @@ import { addAsset, assets, clearAssets } from './assets';
 import type { SlashItem } from './slash';
 import { isDesktop, saveTextDialog, saveBytesDialog, openTextDialog } from './desktop';
 import { setSearch, searchNav, searchStatus, replaceCurrent, replaceAll, clearSearch } from './search';
-import { STATE_MARKER, extractEmbeddedState, importTypst } from './typimport';
+import { STATE_MARKER, extractEmbeddedState, importTypst, reimportTypst } from './typimport';
 import { pageConfig, relayoutPages } from './pagination';
 import { showRulesToCss } from './showcss';
 
@@ -52,7 +52,7 @@ let previewVisible = ((): boolean => { try { return localStorage.getItem(PREVIEW
 const ZOOM_EDITOR_KEY = 'typst-wysiwyg:zoomEditorPct';
 const ZOOM_PREVIEW_KEY = 'typst-wysiwyg:zoomPreviewPct';
 const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
-const loadZoomPct = (k: string): number => { const n = parseInt(localStorage.getItem(k) || '', 10); return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; };
+const loadZoomPct = (k: string): number => { let n = NaN; try { n = parseInt(localStorage.getItem(k) || '', 10); } catch { /* storage blocked */ } return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; };
 let editorZoomPct = loadZoomPct(ZOOM_EDITOR_KEY);
 let previewZoomPct = loadZoomPct(ZOOM_PREVIEW_KEY);
 type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code' | 'reference';
@@ -346,7 +346,9 @@ function installImageDropPaste(page: HTMLElement): void {
     if (!files.length) return;
     e.preventDefault();
     const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos;
-    for (const file of files) await insertImageFile(file, pos);
+    // Each one lands at the same position, ahead of the previous — so insert
+    // back to front to end up in the order they were dropped.
+    for (const file of pos != null ? files.reverse() : files) await insertImageFile(file, pos);
   });
   page.addEventListener('paste', async (e) => {
     const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'));
@@ -460,8 +462,18 @@ function setHeadingLabel(): void {
   const input = window.prompt('Label for this heading (letters, digits, - and _):', current);
   if (input === null) return;
   const label = input.trim().replace(/[^\w-]/g, '-').replace(/^-+|-+$/g, '');
+  if (labelTaken(label, current)) return;
   editor.chain().focus().updateAttributes('heading', { label: label || null }).run();
   schedulePreview();
+}
+
+/** Typst refuses to compile a label that occurs twice, so turn a duplicate
+ *  down (with a message) before it reaches the document. */
+function labelTaken(label: string, current: string): boolean {
+  if (!label || label === current || !documentLabels().includes(label)) return false;
+  alert(`The label “${label}” is already in use. Labels must be unique.`);
+  renderRibbon(); // put the field back to the stored value
+  return true;
 }
 
 interface LabelInfo { label: string; text: string }
@@ -685,7 +697,7 @@ function ribbonGroups(): Node[] {
           rbtn('▢', 'Border', () => updateImage({ border: !at.border }), !!at.border),
         ),
         group('Label',
-          rfield('Figure label', attrInput((at.label as string) || '', (v) => updateImage({ label: v || null }), 'fig:name')),
+          rfield('Figure label', attrInput((at.label as string) || '', (v) => { if (!labelTaken(v, (at.label as string) || '')) updateImage({ label: v || null }); }, 'fig:name')),
         ),
         group('Arrange',
           rbtn('✕', 'Delete', () => cmd((c) => c.deleteSelection())),
@@ -715,7 +727,7 @@ function ribbonGroups(): Node[] {
         ),
         group('Figure',
           rfield('Caption', attrInput((at.caption as string) || '', (v) => updateTable({ caption: v || null }), 'caption')),
-          rfield('Label', attrInput((at.label as string) || '', (v) => updateTable({ label: v || null }), 'tab:name')),
+          rfield('Label', attrInput((at.label as string) || '', (v) => { if (!labelTaken(v, (at.label as string) || '')) updateTable({ label: v || null }); }, 'tab:name')),
         ),
         group('Table',
           rbtn('✕', 'Delete', () => cmd((c) => c.deleteTable())),
@@ -987,8 +999,16 @@ function currentDoc(): SavedDoc {
   return { version: DOC_VERSION, logic, content: editor.getJSON(), assets: assetObj };
 }
 
+/** Whether a loaded value has the shape the rest of the app relies on. */
+function isDocLogic(v: unknown): v is DocLogic {
+  const l = v as DocLogic | null;
+  return !!l && typeof l === 'object'
+    && !!l.style?.page && !!l.style.text && !!l.style.par
+    && Array.isArray(l.lets) && Array.isArray(l.shows);
+}
+
 function applyDoc(data: SavedDoc): void {
-  if (!data || typeof data !== 'object' || !data.content) throw new Error('Not a typst-wysiwyg document');
+  if (!data || typeof data !== 'object' || !data.content || !isDocLogic(data.logic)) throw new Error('Not a typst-wysiwyg document');
   logic = data.logic;
   clearAssets();
   if (data.assets) for (const [path, b64] of Object.entries(data.assets)) assets.set(path, b64ToBytes(b64));
@@ -1035,6 +1055,16 @@ function openDocText(text: string): void {
   }
   const imported = importTypst(text);
   applyDoc({ version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: {} });
+}
+
+/** Apply source edited in the Typst source modal. Unlike opening a file, this
+ *  replaces the markup of the document that is already open, so its media and
+ *  bibliography stay — the source only ever refers to them by path. */
+function applySourceEdit(text: string): void {
+  if (text.trimStart().startsWith('{') || extractEmbeddedState(text)) { openDocText(text); return; }
+  const { assets: keptAssets } = currentDoc();
+  const imported = reimportTypst(text, { logic, content: editor.getJSON() });
+  applyDoc({ version: DOC_VERSION, logic: imported.logic, content: imported.content, assets: keptAssets });
 }
 
 async function saveToFile(): Promise<void> {
@@ -1085,7 +1115,9 @@ function scheduleAutosave(): void {
 function loadSaved(): SavedDoc | null {
   try {
     const s = localStorage.getItem(LS_KEY);
-    return s ? (JSON.parse(s) as SavedDoc) : null;
+    const doc = s ? (JSON.parse(s) as SavedDoc) : null;
+    // A damaged autosave must not keep the app from starting.
+    return doc && typeof doc === 'object' && doc.content && isDocLogic(doc.logic) ? doc : null;
   } catch { return null; }
 }
 
@@ -1328,6 +1360,19 @@ function openShowModal(): void {
 function showRow(r: ShowRule, redraw: () => void): HTMLElement {
   const box = el('div', { class: 'def' });
 
+  // Raw rules (imported ones we can't model) are kept verbatim: the whole
+  // statement is editable, like a raw #let.
+  if (r.kind === 'raw') {
+    const del = el('button', { title: 'Delete' }, '✕');
+    del.onclick = () => { logic.shows = logic.shows.filter((x) => x !== r); redraw(); schedulePreview(); };
+    box.append(el('div', { class: 'bhead' }, el('span', { class: 'muted' }, 'raw #show'), el('span', { class: 'spacer' }), del));
+    const code = el('textarea', { rows: '3' }) as HTMLTextAreaElement;
+    code.value = r.code ?? '';
+    code.oninput = () => { r.code = code.value; schedulePreview(); };
+    box.append(code);
+    return box;
+  }
+
   const target = el('select', {}) as HTMLSelectElement;
   for (const t of ['heading', 'strong', 'emph', 'link', 'raw', 'custom'] as ShowTarget[]) {
     const o = el('option', { value: t }, t === 'custom' ? 'custom…' : t);
@@ -1461,7 +1506,7 @@ function openSourceModal(opts?: { focus?: string }): void {
   const apply = el('button', { class: 'primary' }, 'Apply changes');
   apply.onclick = () => {
     try {
-      openDocText(ta.value); // re-parse the edited markup into the document
+      applySourceEdit(ta.value); // re-parse the edited markup into the document
       closeModal();
     } catch (e) {
       err.textContent = 'Could not parse source: ' + String(e);
@@ -1561,9 +1606,11 @@ app.replaceChildren(ribbon(), main);
 
 const restored = loadSaved();
 if (restored) {
-  logic = restored.logic ?? initial.logic;
+  logic = restored.logic;
   clearAssets();
-  if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
+  try {
+    if (restored.assets) for (const [path, b64] of Object.entries(restored.assets)) assets.set(path, b64ToBytes(b64));
+  } catch { /* undecodable asset: the document still opens, minus that file */ }
 }
 mountEditor((restored?.content ?? initial.content) as object);
 normalizeLogic();

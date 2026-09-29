@@ -27,7 +27,7 @@ function defaultStyle(): DocLogic['style'] {
 }
 
 function unescapeMarkup(s: string): string {
-  return s.replace(/\\([\\#$*_`<>@~[\]=+/-])/g, '$1');
+  return s.replace(/\\([\\#$*_`<>@~[\]=+/.-])/g, '$1');
 }
 
 /** Unescape a Typst string literal's contents (\n, \t, \", \\, …). */
@@ -138,7 +138,16 @@ function parseInline(s: string): PMInline[] {
   let i = 0;
   while (i < s.length) {
     const c = s[i];
-    if (c === '\\' && i + 1 < s.length) { buf += s[i + 1]; i += 2; continue; }
+    // A backslash before whitespace (or ending the text) is a forced line break.
+    if (c === '\\' && (i + 1 >= s.length || /\s/.test(s[i + 1]))) {
+      buf = buf.replace(/ +$/, '');
+      flush();
+      out.push({ type: 'hardBreak' });
+      i++;
+      while (i < s.length && /\s/.test(s[i])) i++;
+      continue;
+    }
+    if (c === '\\') { buf += s[i + 1]; i += 2; continue; }
     if (c === '*') { flush(); active.has('bold') ? active.delete('bold') : active.add('bold'); i++; continue; }
     if (c === '_') { flush(); active.has('italic') ? active.delete('italic') : active.add('italic'); i++; continue; }
     if (c === '`') { const j = s.indexOf('`', i + 1); if (j > i) { flush(); out.push({ type: 'text', text: s.slice(i + 1, j), marks: [{ type: 'code' }] } as PMText); i = j + 1; continue; } }
@@ -171,12 +180,57 @@ function parseInline(s: string): PMInline[] {
 }
 
 // --- table parsing ----------------------------------------------------------
+interface ParsedCell { content: string; header: boolean; colspan: number; rowspan: number }
+
+/** Parse a `[…]` or `table.cell(colspan: …, rowspan: …)[…]` argument. Null when
+ *  it isn't one, or carries cell args we don't model (fill, align, x/y, …) —
+ *  the caller then keeps the whole table as a raw block. */
+function parseCell(arg: string, header: boolean): ParsedCell | null {
+  let colspan = 1, rowspan = 1;
+  let rest = arg;
+  if (arg.startsWith('table.cell(')) {
+    const r = readBalancedFrom(arg, arg.indexOf('('), '(', ')');
+    for (const f of splitTopLevel(r.content, ',').map((a) => a.trim()).filter(Boolean)) {
+      const k = argKey(f), v = argVal(f);
+      if (!/^\d+$/.test(v)) return null;
+      if (k === 'colspan') colspan = parseInt(v, 10);
+      else if (k === 'rowspan') rowspan = parseInt(v, 10);
+      else return null;
+    }
+    rest = arg.slice(r.end).trim();
+  }
+  if (!rest.startsWith('[')) return null;
+  const body = readBalancedFrom(rest, 0, '[', ']');
+  if (rest.slice(body.end).trim() !== '') return null;
+  return { content: body.content, header, colspan, rowspan };
+}
+
+/** Flow cells into rows the way Typst does: left to right, skipping the grid
+ *  slots that a spanning cell from an earlier row already covers. */
+function layoutRows(cells: ParsedCell[], columns: number): ParsedCell[][] {
+  const rows: ParsedCell[][] = [];
+  const taken = new Set<string>();
+  let r = 0, c = 0;
+  for (const cell of cells) {
+    while (taken.has(`${r},${c}`) || c >= columns) {
+      if (c >= columns) { r++; c = 0; } else c++;
+    }
+    for (let dr = 0; dr < cell.rowspan; dr++) {
+      for (let dc = 0; dc < cell.colspan; dc++) taken.add(`${r + dr},${c + dc}`);
+    }
+    (rows[r] ??= []).push(cell);
+    c += cell.colspan;
+  }
+  // A row fully covered by spans from above holds no cell of its own.
+  return rows.filter((row) => row?.length);
+}
+
 function parseTableInner(inner: string): object | null {
   const args = splitTopLevel(inner, ',').map((a) => a.trim()).filter(Boolean);
   let columns = 0;
   let ok = true; // false when we hit a positional arg we can't model as a cell
   const styleArgs: string[] = []; // columns/align/stroke/… kept verbatim
-  const cells: { content: string; header: boolean }[] = [];
+  const cells: ParsedCell[] = [];
   for (const arg of args) {
     if (arg.startsWith('columns:')) {
       const spec = arg.slice(8).trim();
@@ -188,16 +242,13 @@ function parseTableInner(inner: string): object | null {
     } else if (arg.startsWith('table.header(')) {
       const inner2 = readBalancedFrom(arg, arg.indexOf('('), '(', ')').content;
       for (const cell of splitTopLevel(inner2, ',')) {
-        const c = cell.trim();
-        if (c.startsWith('[')) cells.push({ content: readBalancedFrom(c, 0, '[', ']').content, header: true });
-        else if (c) ok = false;
+        if (!cell.trim()) continue;
+        const parsed = parseCell(cell.trim(), true);
+        if (parsed) cells.push(parsed); else ok = false;
       }
-    } else if (arg.startsWith('[')) {
-      cells.push({ content: readBalancedFrom(arg, 0, '[', ']').content, header: false });
-    } else if (arg.startsWith('table.cell')) {
-      const br = arg.indexOf('[');
-      if (br >= 0) cells.push({ content: readBalancedFrom(arg, br, '[', ']').content, header: false });
-      else ok = false;
+    } else if (arg.startsWith('[') || arg.startsWith('table.cell(')) {
+      const parsed = parseCell(arg, false);
+      if (parsed) cells.push(parsed); else ok = false;
     } else {
       // A positional arg we don't understand (bare $math$, table.header[…],
       // table.hline()…). Bail so the caller keeps the table as a raw block
@@ -207,8 +258,8 @@ function parseTableInner(inner: string): object | null {
   }
   if (!columns || !cells.length || !ok) return null;
   const rows: object[] = [];
-  for (let r = 0; r < cells.length; r += columns) {
-    const rowCells = cells.slice(r, r + columns).map((c) => {
+  for (const row of layoutRows(cells, columns)) {
+    const rowCells = row.map((c) => {
       let txt = c.content.trim();
       // A header cell's bold is implied by the header row; unwrap #strong[…]
       // (our own output) so it doesn't accumulate a redundant bold mark.
@@ -218,6 +269,7 @@ function parseTableInner(inner: string): object | null {
       }
       return {
         type: c.header ? 'tableHeader' : 'tableCell',
+        ...(c.colspan > 1 || c.rowspan > 1 ? { attrs: { colspan: c.colspan, rowspan: c.rowspan } } : {}),
         content: [{ type: 'paragraph', content: parseInline(txt) }],
       };
     });
@@ -288,6 +340,38 @@ function parseCaption(text: string): string {
   if (after.startsWith('[')) return unescapeMarkup(readBalancedFrom(after, 0, '[', ']').content.trim());
   const str = after.match(/^"((?:[^"\\]|\\.)*)"/);
   return str ? unescapeTypstString(str[1]) : '';
+}
+
+/** Index of the `$` closing the math that opens at `open`, or -1. */
+function closingDollar(s: string, open: number): number {
+  for (let k = open + 1; k < s.length; k++) {
+    if (s[k] === '\\') k++;
+    else if (s[k] === '$') return k;
+  }
+  return -1;
+}
+
+/**
+ * Read a block equation starting on line `from`. Typst tells display math from
+ * inline math by the whitespace inside the dollars (`$ x $` vs `$x$`), and an
+ * equation followed by more text on its line is just the start of a paragraph
+ * — so both of those are left for the inline parser.
+ */
+function readMathBlock(lines: string[], from: number): { src: string; next: number } | null {
+  const text = lines.slice(from).join('\n');
+  const open = text.indexOf('$');
+  const close = closingDollar(text, open);
+  if (close < 0) return null;
+  const inner = text.slice(open + 1, close);
+  if (!/^\s/.test(inner) || !/\s$/.test(inner)) return null;
+  const lineEnd = text.indexOf('\n', close);
+  if (text.slice(close + 1, lineEnd < 0 ? text.length : lineEnd).trim() !== '') return null;
+  return { src: inner.trim(), next: from + text.slice(0, close).split('\n').length };
+}
+
+/** True when a line opens with `$…$` inline math (closed on that same line). */
+function startsWithInlineMath(line: string): boolean {
+  return line.startsWith('$') && closingDollar(line, 0) > 0;
 }
 
 interface ListEntry { indent: number; ordered: boolean; text: string }
@@ -409,6 +493,14 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
       continue;
     }
 
+    if (/^#quote\(\s*block:\s*true\s*\)\[/.test(t)) {
+      const { inner, next } = readBalancedLines(lines, i, '[', ']');
+      const dedented = inner.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n');
+      blocks.push({ type: 'blockquote', content: parseContent(dedented).content });
+      i = next;
+      continue;
+    }
+
     const colsM = t.match(/^#columns\((\d+)\)\[/);
     if (colsM) {
       const { inner, next } = readBalancedLines(lines, i, '[', ']');
@@ -446,18 +538,10 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     }
 
     if (t.startsWith('$')) {
-      const collected: string[] = [];
-      let j = i;
-      let closed = false;
-      while (j < lines.length) {
-        collected.push(lines[j]);
-        if ((collected.join('\n').match(/\$/g) || []).length >= 2) { closed = true; break; }
-        j++;
-      }
-      if (closed) {
-        const inner = collected.join('\n').replace(/^\s*\$/, '').replace(/\$\s*$/, '').trim();
-        blocks.push({ type: 'mathBlock', attrs: { src: inner } });
-        i = j + 1;
+      const math = readMathBlock(lines, i);
+      if (math) {
+        blocks.push({ type: 'mathBlock', attrs: { src: math.src } });
+        i = math.next;
         continue;
       }
     }
@@ -465,8 +549,9 @@ function parseContent(text: string): { type: 'doc'; content: object[] } {
     // A paragraph that opens with an inline formatting function — the serializer
     // emits #strong[…]/#emph[…]/#strike[…]/… (not *…*/_…_) so marks on part of a
     // word still compile. Parse it as a paragraph rather than freezing the whole
-    // line as a raw block below.
-    if (/^#(?:strong|emph|strike|highlight|underline|link|text|footnote|ref|cite|raw)[([]/.test(t)) {
+    // line as a raw block below. The same goes for one that opens with inline
+    // math (`$x$ is …`).
+    if (/^#(?:strong|emph|strike|highlight|underline|link|text|footnote|ref|cite|raw)[([]/.test(t) || startsWithInlineMath(t)) {
       const buf: string[] = [lines[i]]; i++;
       while (i < lines.length && lines[i].trim() !== '' && !BLOCK_START.test(lines[i].trim())) { buf.push(lines[i]); i++; }
       blocks.push({ type: 'paragraph', content: parseInline(buf.join(' ')) });
@@ -635,34 +720,60 @@ function splitShowRule(line: string): { selector: string; rhs: string } | null {
   return null;
 }
 
+/** The structured props of a `set text(…)` rule, or null when it carries an
+ *  argument we don't model — the caller then keeps the rule verbatim. */
+function parseSetTextProps(args: string): ShowRule['props'] | null {
+  const props: ShowRule['props'] = { fill: '', sizePt: null, weight: 'inherit', style: 'inherit' };
+  for (const f of splitTopLevel(args, ',').map((a) => a.trim()).filter(Boolean)) {
+    const k = argKey(f), v = argVal(f);
+    if (k === 'fill') { const hex = typToHexColor(v); if (!hex || !/^rgb\("[^"]*"\)$/.test(v)) return null; props.fill = hex; }
+    else if (k === 'size') { const m = v.match(/^([\d.]+)pt$/); if (!m) return null; props.sizePt = parseFloat(m[1]); }
+    else if (k === 'weight') { const m = v.match(/^"(regular|bold)"$/); if (!m) return null; props.weight = m[1] as ShowRule['props']['weight']; }
+    else if (k === 'style') { const m = v.match(/^"(normal|italic)"$/); if (!m) return null; props.style = m[1] as ShowRule['props']['style']; }
+    else return null;
+  }
+  return props;
+}
+
+/** The body of an `it => …` rule. A `{ … }` block that spans the whole
+ *  right-hand side is unwrapped; any other expression is kept as it is (the
+ *  generator wraps it in a block again, which evaluates to the same value). */
+function parseShowFunctionBody(rhs: string): string {
+  const expr = rhs.replace(/^it\s*=>\s*/, '').trim();
+  if (expr.startsWith('{')) {
+    const r = readBalancedFrom(expr, 0, '{', '}');
+    if (r.end === expr.length) return r.content.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n').trim();
+  }
+  return expr;
+}
+
 function parseShows(text: string): ShowRule[] {
   const shows: ShowRule[] = [];
-  const lines = text.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const split = splitShowRule(lines[i]);
-    if (!split) continue;
-    const sel = parseSelector(split.selector);
+  // Whole statements, not lines: a multi-line rule stays in one piece, and a
+  // rule can never reach into whatever follows it.
+  for (const stmt of splitStatements(text)) {
+    const t = stmt.trim();
+    const colon = splitShowRule(t);
+    if (!colon) continue;
+    const sel = parseSelector(colon.selector);
     const base: ShowRule = {
       id: uid('show'), target: sel.target, customSelector: sel.customSelector, level: sel.level, kind: 'style',
       props: { fill: '', sizePt: null, weight: 'inherit', style: 'inherit' },
     };
-    const rhs = split.rhs;
-    if (rhs.startsWith('it =>') || rhs.startsWith('it=>')) {
+    const rhs = colon.rhs;
+    if (/^it\s*=>/.test(rhs)) {
       base.kind = 'function';
-      const braceIdx = lines.slice(i).join('\n').indexOf('{', lines[i].indexOf(rhs));
-      if (braceIdx >= 0) {
-        const r = readBalancedFrom(lines.slice(i).join('\n'), braceIdx, '{', '}');
-        base.body = r.content.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n').trim();
-        i += lines.slice(i).join('\n').slice(0, r.end).split('\n').length - 1;
-      } else {
-        base.body = rhs.replace(/^it\s*=>\s*/, '');
-      }
+      base.body = parseShowFunctionBody(rhs);
     } else if (rhs.startsWith('set text(')) {
-      const props = readBalancedFrom(rhs, rhs.indexOf('('), '(', ')').content;
-      const fill = props.match(/fill:\s*([^,]+)/); if (fill) base.props.fill = typToHexColor(fill[1]);
-      const size = props.match(/size:\s*([\d.]+)pt/); if (size) base.props.sizePt = parseFloat(size[1]);
-      const weight = props.match(/weight:\s*"(\w+)"/); if (weight) base.props.weight = weight[1] as ShowRule['props']['weight'];
-      const style = props.match(/style:\s*"(\w+)"/); if (style) base.props.style = style[1] as ShowRule['props']['style'];
+      const r = readBalancedFrom(rhs, rhs.indexOf('('), '(', ')');
+      const props = r.end === rhs.length ? parseSetTextProps(r.content) : null;
+      if (props) base.props = props;
+      else { base.kind = 'raw'; base.code = t; }
+    } else {
+      // Anything else (`set block(…)`, `underline`, `x => …`, …) has no
+      // structured form; keep the statement verbatim so re-saving can't alter it.
+      base.kind = 'raw';
+      base.code = t;
     }
     shows.push(base);
   }
@@ -772,4 +883,32 @@ function usesCallout(node: { type?: string; content?: unknown[] }): boolean {
   if (!node || typeof node !== 'object') return false;
   if (node.type === 'callout') return true;
   return Array.isArray(node.content) && node.content.some((c) => usesCallout(c as typeof node));
+}
+
+/**
+ * Re-import source that was generated from the open document (the Typst source
+ * modal). Plain Typst can't carry what lives outside the markup, so the image
+ * previews and the bibliography are carried over from the document being
+ * replaced — as long as the edited source still refers to them.
+ */
+export function reimportTypst(text: string, prev: { logic: DocLogic; content: unknown }): { logic: DocLogic; content: object } {
+  const imported = importTypst(text);
+  if (prev.logic.bibliography && /^\s*#bibliography\(/m.test(text)) imported.logic.bibliography = prev.logic.bibliography;
+
+  const srcByPath = new Map<string, string>();
+  const walk = (n: unknown, visit: (node: { type?: string; attrs?: Record<string, unknown> }) => void): void => {
+    if (Array.isArray(n)) { n.forEach((c) => walk(c, visit)); return; }
+    if (!n || typeof n !== 'object') return;
+    const node = n as { type?: string; attrs?: Record<string, unknown>; content?: unknown };
+    visit(node);
+    if (node.content) walk(node.content, visit);
+  };
+  walk(prev.content, (n) => {
+    if (n.type === 'image' && typeof n.attrs?.path === 'string' && typeof n.attrs.src === 'string') srcByPath.set(n.attrs.path, n.attrs.src);
+  });
+  walk(imported.content, (n) => {
+    const src = n.type === 'image' && typeof n.attrs?.path === 'string' ? srcByPath.get(n.attrs.path) : undefined;
+    if (src) n.attrs!.src = src;
+  });
+  return imported;
 }
