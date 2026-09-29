@@ -52,7 +52,7 @@ let previewVisible = ((): boolean => { try { return localStorage.getItem(PREVIEW
 const ZOOM_EDITOR_KEY = 'typst-wysiwyg:zoomEditorPct';
 const ZOOM_PREVIEW_KEY = 'typst-wysiwyg:zoomPreviewPct';
 const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
-const loadZoomPct = (k: string): number => { const n = parseInt(localStorage.getItem(k) || '', 10); return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; };
+const loadZoomPct = (k: string): number => { let n = NaN; try { n = parseInt(localStorage.getItem(k) || '', 10); } catch { /* storage blocked */ } return Number.isFinite(n) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n)) : 100; };
 let editorZoomPct = loadZoomPct(ZOOM_EDITOR_KEY);
 let previewZoomPct = loadZoomPct(ZOOM_PREVIEW_KEY);
 type TabId = 'home' | 'layout' | 'insert' | 'view' | 'image' | 'table' | 'columns' | 'code' | 'reference';
