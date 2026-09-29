@@ -1338,6 +1338,19 @@ function openShowModal(): void {
 function showRow(r: ShowRule, redraw: () => void): HTMLElement {
   const box = el('div', { class: 'def' });
 
+  // Raw rules (imported ones we can't model) are kept verbatim: the whole
+  // statement is editable, like a raw #let.
+  if (r.kind === 'raw') {
+    const del = el('button', { title: 'Delete' }, '✕');
+    del.onclick = () => { logic.shows = logic.shows.filter((x) => x !== r); redraw(); schedulePreview(); };
+    box.append(el('div', { class: 'bhead' }, el('span', { class: 'muted' }, 'raw #show'), el('span', { class: 'spacer' }), del));
+    const code = el('textarea', { rows: '3' }) as HTMLTextAreaElement;
+    code.value = r.code ?? '';
+    code.oninput = () => { r.code = code.value; schedulePreview(); };
+    box.append(code);
+    return box;
+  }
+
   const target = el('select', {}) as HTMLSelectElement;
   for (const t of ['heading', 'strong', 'emph', 'link', 'raw', 'custom'] as ShowTarget[]) {
     const o = el('option', { value: t }, t === 'custom' ? 'custom…' : t);

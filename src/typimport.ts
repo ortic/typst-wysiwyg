@@ -635,6 +635,21 @@ function splitShowRule(line: string): { selector: string; rhs: string } | null {
   return null;
 }
 
+/** The structured props of a `set text(…)` rule, or null when it carries an
+ *  argument we don't model — the caller then keeps the rule verbatim. */
+function parseSetTextProps(args: string): ShowRule['props'] | null {
+  const props: ShowRule['props'] = { fill: '', sizePt: null, weight: 'inherit', style: 'inherit' };
+  for (const f of splitTopLevel(args, ',').map((a) => a.trim()).filter(Boolean)) {
+    const k = argKey(f), v = argVal(f);
+    if (k === 'fill') { const hex = typToHexColor(v); if (!hex || !/^rgb\("[^"]*"\)$/.test(v)) return null; props.fill = hex; }
+    else if (k === 'size') { const m = v.match(/^([\d.]+)pt$/); if (!m) return null; props.sizePt = parseFloat(m[1]); }
+    else if (k === 'weight') { const m = v.match(/^"(regular|bold)"$/); if (!m) return null; props.weight = m[1] as ShowRule['props']['weight']; }
+    else if (k === 'style') { const m = v.match(/^"(normal|italic)"$/); if (!m) return null; props.style = m[1] as ShowRule['props']['style']; }
+    else return null;
+  }
+  return props;
+}
+
 /** The body of an `it => …` rule. A `{ … }` block that spans the whole
  *  right-hand side is unwrapped; any other expression is kept as it is (the
  *  generator wraps it in a block again, which evaluates to the same value). */
@@ -665,11 +680,15 @@ function parseShows(text: string): ShowRule[] {
       base.kind = 'function';
       base.body = parseShowFunctionBody(rhs);
     } else if (rhs.startsWith('set text(')) {
-      const props = readBalancedFrom(rhs, rhs.indexOf('('), '(', ')').content;
-      const fill = props.match(/fill:\s*([^,]+)/); if (fill) base.props.fill = typToHexColor(fill[1]);
-      const size = props.match(/size:\s*([\d.]+)pt/); if (size) base.props.sizePt = parseFloat(size[1]);
-      const weight = props.match(/weight:\s*"(\w+)"/); if (weight) base.props.weight = weight[1] as ShowRule['props']['weight'];
-      const style = props.match(/style:\s*"(\w+)"/); if (style) base.props.style = style[1] as ShowRule['props']['style'];
+      const r = readBalancedFrom(rhs, rhs.indexOf('('), '(', ')');
+      const props = r.end === rhs.length ? parseSetTextProps(r.content) : null;
+      if (props) base.props = props;
+      else { base.kind = 'raw'; base.code = t; }
+    } else {
+      // Anything else (`set block(…)`, `underline`, `x => …`, …) has no
+      // structured form; keep the statement verbatim so re-saving can't alter it.
+      base.kind = 'raw';
+      base.code = t;
     }
     shows.push(base);
   }

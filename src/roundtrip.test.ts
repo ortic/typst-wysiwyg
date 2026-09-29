@@ -486,6 +486,27 @@ See @tab:d.`;
 });
 
 describe('import keeps what it cannot model', () => {
+  it('keeps unmodelled #show rules verbatim', () => {
+    const src = `#show heading: set block(above: 2em)
+#show link: underline
+#show raw: set text(font: "Fira Code", size: 9pt)
+= Hi`;
+    const { typ, logic } = cycle(src);
+    expect(logic.shows.map((s) => s.kind)).toEqual(['raw', 'raw', 'raw']);
+    expect(typ).toContain('#show heading: set block(above: 2em)');
+    expect(typ).toContain('#show link: underline');
+    expect(typ).toContain('#show raw: set text(font: "Fira Code", size: 9pt)');
+    expect(typ).not.toContain('set text()');
+  });
+
+  it('still models a plain set text(…) rule', () => {
+    const { logic } = cycle('#show heading.where(level: 1): set text(fill: rgb("#1c7ed6"), size: 18pt, weight: "bold")\n= Hi');
+    expect(logic.shows[0]).toMatchObject({
+      kind: 'style', target: 'heading', level: 1,
+      props: { fill: '#1c7ed6', sizePt: 18, weight: 'bold', style: 'inherit' },
+    });
+  });
+
   it('a brace-less `it =>` rule does not swallow a later block', () => {
     const src = `#show heading: it => text(red, it)
 #let f(x) = {

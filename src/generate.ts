@@ -55,6 +55,7 @@ function genLet(b: LetBinding): string {
 }
 
 function genShow(s: ShowRule): string {
+  if (s.kind === 'raw') return (s.code ?? '').trim();
   let selector: string;
   if (s.target === 'custom') selector = (s.customSelector ?? '').trim() || 'heading';
   else if (s.target === 'heading' && s.level != null) selector = `heading.where(level: ${s.level})`;
