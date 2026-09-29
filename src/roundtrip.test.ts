@@ -485,6 +485,30 @@ See @tab:d.`;
   });
 });
 
+describe('import keeps what it cannot model', () => {
+  it('a brace-less `it =>` rule does not swallow a later block', () => {
+    const src = `#show heading: it => text(red, it)
+#let f(x) = {
+  x + 1
+}
+= Hi`;
+    const { typ, logic } = cycle(src);
+    expect(logic.shows).toHaveLength(1);
+    expect(logic.shows[0]).toMatchObject({ kind: 'function', body: 'text(red, it)' });
+    expect(logic.lets.map((l) => l.name)).toEqual(['f']);
+    expect(typ).toContain('#show heading: it => {\n  text(red, it)\n}');
+  });
+
+  it('reads a multi-line `it => { … }` rule', () => {
+    const src = `#show heading: it => {
+  set text(red)
+  it
+}
+= Hi`;
+    expect(cycle(src).logic.shows[0]).toMatchObject({ kind: 'function', body: 'set text(red)\nit' });
+  });
+});
+
 describe('re-importing edited source', () => {
   it('carries image previews and the bibliography over', () => {
     const prevLogic = importTypst('= Hi').logic;

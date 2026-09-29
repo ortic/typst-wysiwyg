@@ -635,28 +635,35 @@ function splitShowRule(line: string): { selector: string; rhs: string } | null {
   return null;
 }
 
+/** The body of an `it => …` rule. A `{ … }` block that spans the whole
+ *  right-hand side is unwrapped; any other expression is kept as it is (the
+ *  generator wraps it in a block again, which evaluates to the same value). */
+function parseShowFunctionBody(rhs: string): string {
+  const expr = rhs.replace(/^it\s*=>\s*/, '').trim();
+  if (expr.startsWith('{')) {
+    const r = readBalancedFrom(expr, 0, '{', '}');
+    if (r.end === expr.length) return r.content.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n').trim();
+  }
+  return expr;
+}
+
 function parseShows(text: string): ShowRule[] {
   const shows: ShowRule[] = [];
-  const lines = text.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const split = splitShowRule(lines[i]);
-    if (!split) continue;
-    const sel = parseSelector(split.selector);
+  // Whole statements, not lines: a multi-line rule stays in one piece, and a
+  // rule can never reach into whatever follows it.
+  for (const stmt of splitStatements(text)) {
+    const t = stmt.trim();
+    const colon = splitShowRule(t);
+    if (!colon) continue;
+    const sel = parseSelector(colon.selector);
     const base: ShowRule = {
       id: uid('show'), target: sel.target, customSelector: sel.customSelector, level: sel.level, kind: 'style',
       props: { fill: '', sizePt: null, weight: 'inherit', style: 'inherit' },
     };
-    const rhs = split.rhs;
-    if (rhs.startsWith('it =>') || rhs.startsWith('it=>')) {
+    const rhs = colon.rhs;
+    if (/^it\s*=>/.test(rhs)) {
       base.kind = 'function';
-      const braceIdx = lines.slice(i).join('\n').indexOf('{', lines[i].indexOf(rhs));
-      if (braceIdx >= 0) {
-        const r = readBalancedFrom(lines.slice(i).join('\n'), braceIdx, '{', '}');
-        base.body = r.content.split('\n').map((l) => l.replace(/^ {2}/, '')).join('\n').trim();
-        i += lines.slice(i).join('\n').slice(0, r.end).split('\n').length - 1;
-      } else {
-        base.body = rhs.replace(/^it\s*=>\s*/, '');
-      }
+      base.body = parseShowFunctionBody(rhs);
     } else if (rhs.startsWith('set text(')) {
       const props = readBalancedFrom(rhs, rhs.indexOf('('), '(', ')').content;
       const fill = props.match(/fill:\s*([^,]+)/); if (fill) base.props.fill = typToHexColor(fill[1]);
