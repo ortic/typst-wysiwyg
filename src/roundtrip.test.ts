@@ -574,6 +574,12 @@ describe('serializer output means what the editor shows', () => {
   const ser = (...blocks: object[]) => serializeContent(PMNode.fromJSON(schema, { type: 'doc', content: blocks }));
   const reimport = (typ: string) => (importTypst(typ).content as { content: object[] }).content;
 
+  it('escapes text that would start a numbered list', () => {
+    expect(ser(p(t('1. Introduction')))).toBe('1\\. Introduction');
+    expect(ser(p(t('Version 3.14 and 2. item')))).toBe('Version 3.14 and 2. item');
+    expect(reimport('1\\. Introduction')).toEqual([p(t('1. Introduction'))]);
+  });
+
   it('keeps a hard break inside its list item and heading', () => {
     const list = { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('a'), br, t('b'))] }] };
     expect(ser(list)).toBe('- a \\ b');

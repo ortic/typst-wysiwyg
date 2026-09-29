@@ -16,7 +16,10 @@ import type { Node as PMNode, Mark } from '@tiptap/pm/model';
  *  hyphen) and `//`/`/*` start comments. Escaping them keeps the output
  *  faithful to what the user typed (WYSIWYG). */
 export function escapeMarkup(s: string): string {
-  return s.replace(/([\\#$*_`<>@~[\]=+/-])/g, '\\$1');
+  return s
+    .replace(/([\\#$*_`<>@~[\]=+/-])/g, '\\$1')
+    // `1. text` opening a run would start a numbered list item.
+    .replace(/^(\s*\d+)\.(?=\s|$)/, '$1\\.');
 }
 
 function quote(s: string): string {
