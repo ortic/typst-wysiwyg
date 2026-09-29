@@ -111,7 +111,9 @@ function serializeList(node: PMNode, marker: string, depth: number): string {
   const pad = '  '.repeat(depth);
   const lines: string[] = [];
   node.forEach((item) => {
-    // A listItem holds a paragraph (its text) and optionally nested lists.
+    // A listItem holds a paragraph (its text), optionally followed by nested
+    // lists or further blocks. Those belong to the item as long as they are
+    // indented past its marker; a blank line keeps them separate blocks.
     let leadDone = false;
     item.forEach((child) => {
       const name = child.type.name;
@@ -121,7 +123,7 @@ function serializeList(node: PMNode, marker: string, depth: number): string {
         lines.push(`${pad}${marker} ${inline(child, BREAK_SAME_LINE)}`);
         leadDone = true;
       } else {
-        lines.push(`${pad}  ${inline(child)}`);
+        lines.push('', indentLines(serializeBlock(child), `${pad}  `));
       }
     });
   });

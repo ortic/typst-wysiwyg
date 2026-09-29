@@ -603,6 +603,15 @@ describe('serializer output means what the editor shows', () => {
     expect(typ).toBe('#quote(block: true)[\n  one\n\n  two\n]');
     expect(reimport(typ)).toEqual([quote]);
   });
+
+  it('keeps further blocks of a list item inside the item', () => {
+    const item = (...content: object[]) => ({ type: 'listItem', content });
+    const typ = ser({ type: 'bulletList', content: [
+      item(p(t('a')), p(t('b'))),
+      item(p(t('c')), { type: 'image', attrs: { src: 'data:,', path: '/assets/img1.png' } }),
+    ] });
+    expect(typ).toBe('- a\n\n  b\n- c\n\n  #image("/assets/img1.png", width: 80%)');
+  });
 });
 
 describe('table spans', () => {
